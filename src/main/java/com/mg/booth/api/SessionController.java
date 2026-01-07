@@ -1,6 +1,7 @@
 package com.mg.booth.api;
 
 import com.mg.booth.domain.Session;
+import com.mg.booth.dto.CaptureRequest;
 import com.mg.booth.dto.CreateSessionRequest;
 import com.mg.booth.dto.FinishRequest;
 import com.mg.booth.dto.FinishResponse;
@@ -43,5 +44,11 @@ public class SessionController {
     String reason = (req == null) ? null : req.getReason();
     sessionService.finish(sessionId, reason);
     return new FinishResponse(true, "DONE");
+  }
+
+  @PostMapping("/sessions/{sessionId}/capture")
+  public Session capture(@PathVariable String sessionId,
+                         @RequestBody(required = false) CaptureRequest req) {
+    return sessionService.capture(sessionId, req);
   }
 }
