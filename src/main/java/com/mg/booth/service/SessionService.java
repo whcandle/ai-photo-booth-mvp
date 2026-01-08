@@ -1,13 +1,16 @@
 package com.mg.booth.service;
 
+import com.mg.booth.camera.CameraService;
 import com.mg.booth.domain.Session;
 import com.mg.booth.domain.SessionProgress;
 import com.mg.booth.domain.SessionState;
+import com.mg.booth.dto.ApiError;
 import com.mg.booth.dto.CaptureRequest;
 import com.mg.booth.dto.CreateSessionRequest;
 import com.mg.booth.dto.SelectTemplateRequest;
 import com.mg.booth.exception.ConflictException;
 import com.mg.booth.exception.NotFoundException;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
@@ -23,21 +26,36 @@ public class SessionService {
   private final TemplateService templateService;
   private final SessionStateMachine sm;
   private final StorageService storageService;
-  private final MockCameraService mockCameraService;
+  private final CameraService cameraService;
+  private final MockAiService mockAiService;
   private final Executor boothExecutor;
 
   public SessionService(
     TemplateService templateService,
     SessionStateMachine sm,
     StorageService storageService,
-    MockCameraService mockCameraService,
-    Executor boothExecutor
+    @Qualifier("mockCameraService")CameraService cameraService,
+    MockAiService mockAiService,
+    @Qualifier("boothExecutor") Executor boothExecutor
   ) {
     this.templateService = templateService;
     this.sm = sm;
     this.storageService = storageService;
-    this.mockCameraService = mockCameraService;
+    this.cameraService = cameraService;
+    this.mockAiService = mockAiService;
     this.boothExecutor = boothExecutor;
+  }
+
+  private void enterState(Session s, SessionState to, SessionProgress progress) {
+    s.setState(to);
+    s.setProgress(progress);
+    s.setUpdatedAt(OffsetDateTime.now());
+    s.setStateEnteredAt(s.getUpdatedAt());
+  }
+
+  public Map<String, Session> unsafeStore() {
+    // 给 Sweeper 用（MVP 简化）
+    return store;
   }
 
   public Session create(CreateSessionRequest req) {
@@ -50,18 +68,25 @@ public class SessionService {
 
     Session s = new Session();
     s.setSessionId(id);
-    s.setState(SessionState.SELECTING);
     s.setTemplateId(null);
     s.setAttemptIndex(0);
     s.setMaxRetries(req.getMaxRetries());
     s.setRetriesLeft(req.getMaxRetries());
     s.setCountdownSeconds(req.getCountdownSeconds());
-    s.setProgress(new SessionProgress(SessionProgress.Step.NONE, "等待选择模板", 0));
+
     s.setRawUrl(null);
+    s.setPreviewUrl(null);
+    s.setFinalUrl(null);
+
     s.setCaptureJobRunning(false);
+    s.setAiJobRunning(false);
+    s.setError(null);
+
     s.setCreatedAt(now);
     s.setUpdatedAt(now);
+    s.setStateEnteredAt(now);
 
+    enterState(s, SessionState.SELECTING, new SessionProgress(SessionProgress.Step.NONE, "等待选择模板", 0));
     store.put(id, s);
     return s;
   }
@@ -86,22 +111,17 @@ public class SessionService {
     }
 
     s.setTemplateId(req.getTemplateId());
-    s.setState(SessionState.COUNTDOWN);
-    s.setProgress(new SessionProgress(SessionProgress.Step.NONE, "准备倒计时", 0));
-    s.setUpdatedAt(OffsetDateTime.now());
+    s.setError(null);
+    enterState(s, SessionState.COUNTDOWN, new SessionProgress(SessionProgress.Step.NONE, "准备倒计时", 0));
     return s;
   }
 
   /**
-   * Day3: Trigger capture (mock camera).
-   * - Only allowed in COUNTDOWN
-   * - Idempotent: if already CAPTURING/PROCESSING, return current session
-   * - Prevent duplicate job with captureJobRunning flag
+   * Day3+4: capture + chain mock AI to reach PREVIEW
    */
   public Session capture(String sessionId, CaptureRequest req) {
     Session s = get(sessionId);
 
-    // Optional: client may pass attemptIndex; we ignore unless matches current
     Integer clientAttempt = (req == null) ? null : req.getAttemptIndex();
     if (clientAttempt != null && !clientAttempt.equals(s.getAttemptIndex())) {
       throw new ConflictException(
@@ -110,8 +130,10 @@ public class SessionService {
       );
     }
 
-    // Idempotency by state:
-    if (s.getState() == SessionState.CAPTURING || s.getState() == SessionState.PROCESSING) {
+    // idempotency: if already in capturing/processing/preview, just return
+    if (s.getState() == SessionState.CAPTURING
+      || s.getState() == SessionState.PROCESSING
+      || s.getState() == SessionState.PREVIEW) {
       return s;
     }
 
@@ -119,43 +141,86 @@ public class SessionService {
       throw new ConflictException("INVALID_STATE", "Action not allowed in current state: " + s.getState());
     }
 
-    // Prevent duplicate job start (e.g., double click)
     synchronized (s) {
-      if (s.isCaptureJobRunning()) {
-        return s; // already started
-      }
+      if (s.isCaptureJobRunning()) return s;
       s.setCaptureJobRunning(true);
-      s.setState(SessionState.CAPTURING);
-      s.setProgress(new SessionProgress(SessionProgress.Step.NONE, "拍照中…", 5));
-      s.setUpdatedAt(OffsetDateTime.now());
+      s.setError(null);
+      enterState(s, SessionState.CAPTURING, new SessionProgress(SessionProgress.Step.NONE, "拍照中…", 5));
     }
 
     int attemptIndex = s.getAttemptIndex();
     var rawPath = storageService.rawFilePath(sessionId, attemptIndex);
     storageService.ensureDir(rawPath.getParent());
 
-    // async job
     boothExecutor.execute(() -> {
       try {
-        mockCameraService.captureTo(rawPath);
+        // 1) Mock camera
+        cameraService.captureTo(rawPath);
 
         synchronized (s) {
           s.setRawUrl(storageService.rawUrl(sessionId, attemptIndex));
-          s.setProgress(new SessionProgress(SessionProgress.Step.CAPTURE_DONE, "拍照完成", 20));
-          // Day3 ends here, but we advance to PROCESSING for Day4 extension
-          if (sm.canTransition(s.getState(), SessionState.PROCESSING)) {
-            s.setState(SessionState.PROCESSING);
-            s.setProgress(new SessionProgress(SessionProgress.Step.AI_QUEUED, "等待AI处理（Day4 实现）", 25));
-          }
           s.setCaptureJobRunning(false);
+
+          // enter PROCESSING
+          if (!sm.canTransition(s.getState(), SessionState.PROCESSING)) {
+            throw new RuntimeException("Invalid transition to PROCESSING from " + s.getState());
+          }
+          enterState(s, SessionState.PROCESSING,
+            new SessionProgress(SessionProgress.Step.CAPTURE_DONE, "拍照完成，准备AI", 20));
+        }
+
+        // 2) Start AI job (防重复)
+        synchronized (s) {
+          if (s.isAiJobRunning()) return;
+          s.setAiJobRunning(true);
+          s.setProgress(new SessionProgress(SessionProgress.Step.AI_QUEUED, "AI排队中…", 30));
           s.setUpdatedAt(OffsetDateTime.now());
         }
+
+        // 3) Progress: AI processing
+        Thread.sleep(800);
+        synchronized (s) {
+          s.setProgress(new SessionProgress(SessionProgress.Step.AI_PROCESSING, "AI处理中…", 60));
+          s.setUpdatedAt(OffsetDateTime.now());
+        }
+
+        // 4) Mock AI work: generate preview/final
+        var previewPath = storageService.previewFilePath(sessionId, attemptIndex);
+        var finalPath = storageService.finalFilePath(sessionId, attemptIndex);
+        storageService.ensureDir(previewPath.getParent());
+        storageService.ensureDir(finalPath.getParent());
+
+        // 再推进一点进度
+        Thread.sleep(600);
+        synchronized (s) {
+          s.setProgress(new SessionProgress(SessionProgress.Step.PREVIEW_READY, "生成预览…", 80));
+          s.setUpdatedAt(OffsetDateTime.now());
+        }
+
+        mockAiService.process(rawPath, previewPath, finalPath);
+
+        synchronized (s) {
+          s.setPreviewUrl(storageService.previewUrl(sessionId, attemptIndex));
+          s.setFinalUrl(storageService.finalUrl(sessionId, attemptIndex));
+          s.setProgress(new SessionProgress(SessionProgress.Step.FINAL_READY, "生成成品…", 95));
+          s.setUpdatedAt(OffsetDateTime.now());
+        }
+
+        // 5) Enter PREVIEW
+        synchronized (s) {
+          if (!sm.canTransition(s.getState(), SessionState.PREVIEW)) {
+            throw new RuntimeException("Invalid transition to PREVIEW from " + s.getState());
+          }
+          s.setAiJobRunning(false);
+          enterState(s, SessionState.PREVIEW, new SessionProgress(SessionProgress.Step.FINAL_READY, "请确认 / 重拍", 100));
+        }
+
       } catch (Exception e) {
         synchronized (s) {
-          s.setState(SessionState.ERROR);
-          s.setProgress(new SessionProgress(SessionProgress.Step.NONE, "拍照失败", 0));
           s.setCaptureJobRunning(false);
-          s.setUpdatedAt(OffsetDateTime.now());
+          s.setAiJobRunning(false);
+          s.setError(new ApiError("PROCESSING_FAILED", "Capture/AI failed", Map.of("reason", e.getMessage())));
+          enterState(s, SessionState.ERROR, new SessionProgress(SessionProgress.Step.NONE, "处理失败，返回首页", 0));
         }
       }
     });
@@ -170,11 +235,15 @@ public class SessionService {
       throw new ConflictException("INVALID_STATE", "Finish not allowed in current state: " + s.getState());
     }
 
-    s.setState(SessionState.IDLE);
     s.setTemplateId(null);
     s.setRawUrl(null);
-    s.setProgress(new SessionProgress(SessionProgress.Step.NONE, "已回到首页", 0));
-    s.setUpdatedAt(OffsetDateTime.now());
+    s.setPreviewUrl(null);
+    s.setFinalUrl(null);
+    s.setError(null);
+    s.setCaptureJobRunning(false);
+    s.setAiJobRunning(false);
+
+    enterState(s, SessionState.IDLE, new SessionProgress(SessionProgress.Step.NONE, "已回到首页", 0));
   }
 }
 

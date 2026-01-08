@@ -27,7 +27,7 @@ public class SessionStateMachine {
     allowed.put(SessionState.CAPTURING, EnumSet.of(SessionState.PROCESSING, SessionState.IDLE));
 
     // Finish: allow recovery to IDLE
-    allowed.put(SessionState.PROCESSING, EnumSet.of(SessionState.IDLE));
+    allowed.put(SessionState.PROCESSING, EnumSet.of(SessionState.PREVIEW, SessionState.IDLE));
     allowed.put(SessionState.PREVIEW, EnumSet.of(SessionState.IDLE));
     allowed.put(SessionState.DELIVERING, EnumSet.of(SessionState.IDLE));
     allowed.put(SessionState.DONE, EnumSet.of(SessionState.IDLE));

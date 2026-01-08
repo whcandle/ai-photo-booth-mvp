@@ -1,5 +1,6 @@
 package com.mg.booth.service;
 
+import com.mg.booth.camera.CameraService;
 import org.springframework.stereotype.Service;
 
 import java.nio.file.*;
@@ -8,7 +9,7 @@ import java.util.Random;
 import java.util.stream.Collectors;
 
 @Service
-public class MockCameraService {
+public class MockCameraService implements CameraService {
 
   private final Random random = new Random();
   private final Path sampleDir = Path.of("assets", "sample_raw");

@@ -12,9 +12,20 @@ public class Session {
   private Integer countdownSeconds;
   private SessionProgress progress;
   private String rawUrl;
+  private String previewUrl;
+  private String finalUrl;
 
   // Day3: 防重复启动 capture job
   private boolean captureJobRunning;
+
+  // 用于超时判断
+  private OffsetDateTime stateEnteredAt;
+
+  // 防重复启动 AI job
+  private boolean aiJobRunning;
+
+  // 对齐 OpenAPI 的 error 字段
+  private com.mg.booth.dto.ApiError error;
 
   private OffsetDateTime createdAt;
   private OffsetDateTime updatedAt;
@@ -62,8 +73,23 @@ public class Session {
   public String getRawUrl() { return rawUrl; }
   public void setRawUrl(String rawUrl) { this.rawUrl = rawUrl; }
 
+  public String getPreviewUrl() { return previewUrl; }
+  public void setPreviewUrl(String previewUrl) { this.previewUrl = previewUrl; }
+
+  public String getFinalUrl() { return finalUrl; }
+  public void setFinalUrl(String finalUrl) { this.finalUrl = finalUrl; }
+
   public boolean isCaptureJobRunning() { return captureJobRunning; }
   public void setCaptureJobRunning(boolean captureJobRunning) { this.captureJobRunning = captureJobRunning; }
+
+  public OffsetDateTime getStateEnteredAt() { return stateEnteredAt; }
+  public void setStateEnteredAt(OffsetDateTime stateEnteredAt) { this.stateEnteredAt = stateEnteredAt; }
+
+  public boolean isAiJobRunning() { return aiJobRunning; }
+  public void setAiJobRunning(boolean aiJobRunning) { this.aiJobRunning = aiJobRunning; }
+
+  public com.mg.booth.dto.ApiError getError() { return error; }
+  public void setError(com.mg.booth.dto.ApiError error) { this.error = error; }
 
   public OffsetDateTime getCreatedAt() { return createdAt; }
   public void setCreatedAt(OffsetDateTime createdAt) { this.createdAt = createdAt; }
