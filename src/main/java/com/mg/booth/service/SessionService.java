@@ -29,6 +29,7 @@ public class SessionService {
   private final CameraService cameraService;
   private final MockAiService mockAiService;
   private final Executor boothExecutor;
+  private final DeliveryService deliveryService;
 
   public SessionService(
     TemplateService templateService,
@@ -36,7 +37,8 @@ public class SessionService {
     StorageService storageService,
     @Qualifier("mockCameraService")CameraService cameraService,
     MockAiService mockAiService,
-    @Qualifier("boothExecutor") Executor boothExecutor
+    @Qualifier("boothExecutor") Executor boothExecutor,
+    DeliveryService deliveryService
   ) {
     this.templateService = templateService;
     this.sm = sm;
@@ -44,6 +46,7 @@ public class SessionService {
     this.cameraService = cameraService;
     this.mockAiService = mockAiService;
     this.boothExecutor = boothExecutor;
+    this.deliveryService = deliveryService;
   }
 
   private void enterState(Session s, SessionState to, SessionProgress progress) {
@@ -239,11 +242,74 @@ public class SessionService {
     s.setRawUrl(null);
     s.setPreviewUrl(null);
     s.setFinalUrl(null);
+    s.setDownloadToken(null);
+    s.setDownloadUrl(null);
     s.setError(null);
     s.setCaptureJobRunning(false);
     s.setAiJobRunning(false);
 
     enterState(s, SessionState.IDLE, new SessionProgress(SessionProgress.Step.NONE, "已回到首页", 0));
+  }
+
+  public Session retry(String sessionId, String reason) {
+    Session s = get(sessionId);
+
+    if (!sm.canTransition(s.getState(), SessionState.COUNTDOWN)) {
+      throw new ConflictException("INVALID_STATE", "Retry not allowed in current state: " + s.getState());
+    }
+
+    if (s.getRetriesLeft() == null || s.getRetriesLeft() <= 0) {
+      throw new ConflictException("NO_RETRIES_LEFT", "No retries left");
+    }
+
+    // 关键：attemptIndex++，retriesLeft--
+    synchronized (s) {
+      s.setRetriesLeft(s.getRetriesLeft() - 1);
+      s.setAttemptIndex(s.getAttemptIndex() + 1);
+
+      // 清理上一次生成的图和交付信息（避免前端误拿旧图）
+      s.setRawUrl(null);
+      s.setPreviewUrl(null);
+      s.setFinalUrl(null);
+      s.setDownloadToken(null);
+      s.setDownloadUrl(null);
+      s.setError(null);
+
+      s.setCaptureJobRunning(false);
+      s.setAiJobRunning(false);
+
+      enterState(s, SessionState.COUNTDOWN, new SessionProgress(SessionProgress.Step.NONE, "准备重拍倒计时", 0));
+    }
+    return s;
+  }
+
+  public Session confirm(String sessionId) {
+    Session s = get(sessionId);
+
+    if (s.getState() == SessionState.DELIVERING || s.getState() == SessionState.DONE) {
+      // 幂等：已经生成过 token 直接返回
+      return s;
+    }
+
+    if (!sm.canTransition(s.getState(), SessionState.DELIVERING)) {
+      throw new ConflictException("INVALID_STATE", "Confirm not allowed in current state: " + s.getState());
+    }
+
+    if (s.getFinalUrl() == null) {
+      throw new ConflictException("INVALID_STATE", "Final image not ready");
+    }
+
+    synchronized (s) {
+      // 生成 token（TTL 120s，够演示）
+      var rec = deliveryService.createToken(s.getSessionId(), 120);
+      s.setDownloadToken(rec.getToken());
+      s.setDownloadUrl("/d/" + rec.getToken());
+
+      enterState(s, SessionState.DELIVERING,
+        new SessionProgress(SessionProgress.Step.DELIVERY_READY, "扫码下载照片", 100));
+    }
+
+    return s;
   }
 }
 

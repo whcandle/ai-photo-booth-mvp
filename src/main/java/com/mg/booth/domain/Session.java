@@ -14,6 +14,8 @@ public class Session {
   private String rawUrl;
   private String previewUrl;
   private String finalUrl;
+  private String downloadToken;
+  private String downloadUrl;
 
   // Day3: 防重复启动 capture job
   private boolean captureJobRunning;
@@ -78,6 +80,12 @@ public class Session {
 
   public String getFinalUrl() { return finalUrl; }
   public void setFinalUrl(String finalUrl) { this.finalUrl = finalUrl; }
+
+  public String getDownloadToken() { return downloadToken; }
+  public void setDownloadToken(String downloadToken) { this.downloadToken = downloadToken; }
+
+  public String getDownloadUrl() { return downloadUrl; }
+  public void setDownloadUrl(String downloadUrl) { this.downloadUrl = downloadUrl; }
 
   public boolean isCaptureJobRunning() { return captureJobRunning; }
   public void setCaptureJobRunning(boolean captureJobRunning) { this.captureJobRunning = captureJobRunning; }

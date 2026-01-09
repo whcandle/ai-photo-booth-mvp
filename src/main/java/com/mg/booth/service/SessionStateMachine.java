@@ -28,8 +28,8 @@ public class SessionStateMachine {
 
     // Finish: allow recovery to IDLE
     allowed.put(SessionState.PROCESSING, EnumSet.of(SessionState.PREVIEW, SessionState.IDLE));
-    allowed.put(SessionState.PREVIEW, EnumSet.of(SessionState.IDLE));
-    allowed.put(SessionState.DELIVERING, EnumSet.of(SessionState.IDLE));
+    allowed.put(SessionState.PREVIEW, EnumSet.of(SessionState.COUNTDOWN, SessionState.DELIVERING, SessionState.IDLE));
+    allowed.put(SessionState.DELIVERING, EnumSet.of(SessionState.DONE, SessionState.IDLE));
     allowed.put(SessionState.DONE, EnumSet.of(SessionState.IDLE));
     allowed.put(SessionState.ERROR, EnumSet.of(SessionState.IDLE));
   }
