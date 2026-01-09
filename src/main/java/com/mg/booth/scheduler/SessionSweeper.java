@@ -35,7 +35,7 @@ public class SessionSweeper {
       long seconds = Duration.between(s.getStateEnteredAt(), now).toSeconds();
 
       // PROCESSING 30s -> ERROR -> IDLE
-      if (s.getState() == SessionState.PROCESSING && seconds > 30) {
+      if (s.getState() == SessionState.PROCESSING && seconds > 120) {
         synchronized (s) {
           s.setError(new ApiError("TIMEOUT", "Processing timeout",
             Map.of("state", "PROCESSING", "seconds", seconds)));
