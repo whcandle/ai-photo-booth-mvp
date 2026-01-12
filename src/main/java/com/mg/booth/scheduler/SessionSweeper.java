@@ -1,10 +1,9 @@
 package com.mg.booth.scheduler;
 
 import com.mg.booth.domain.Session;
-import com.mg.booth.domain.SessionProgress;
 import com.mg.booth.domain.SessionState;
-import com.mg.booth.dto.ApiError;
 import com.mg.booth.service.DeliveryService;
+import com.mg.booth.service.IdempotencyService;
 import com.mg.booth.service.SessionService;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -18,10 +17,12 @@ public class SessionSweeper {
 
   private final SessionService sessionService;
   private final DeliveryService deliveryService;
+  private final IdempotencyService idempotencyService;
 
-  public SessionSweeper(SessionService sessionService, DeliveryService deliveryService) {
+  public SessionSweeper(SessionService sessionService, DeliveryService deliveryService, IdempotencyService idempotencyService) {
     this.sessionService = sessionService;
     this.deliveryService = deliveryService;
+    this.idempotencyService = idempotencyService;
   }
 
   @Scheduled(fixedDelay = 1000)
@@ -31,29 +32,28 @@ public class SessionSweeper {
 
     for (Session s : store.values()) {
       if (s.getStateEnteredAt() == null) continue;
-
       long seconds = Duration.between(s.getStateEnteredAt(), now).toSeconds();
 
-      // PROCESSING 30s -> ERROR -> IDLE
-      if (s.getState() == SessionState.PROCESSING && seconds > 120) {
+      // SELECTING 30s -> IDLE
+      if (s.getState() == SessionState.SELECTING && seconds > 30) {
         synchronized (s) {
-          s.setError(new ApiError("TIMEOUT", "Processing timeout",
-            Map.of("state", "PROCESSING", "seconds", seconds)));
-          s.setState(SessionState.ERROR);
-          s.setProgress(new SessionProgress(SessionProgress.Step.NONE, "处理超时，返回首页", 0));
-          s.setUpdatedAt(now);
-          s.setStateEnteredAt(now);
+          safeFinish(s.getSessionId(), "TIMEOUT_SELECTING");
+        }
+        continue;
+      }
 
-          // 回 IDLE
-          s.setState(SessionState.IDLE);
-          s.setProgress(new SessionProgress(SessionProgress.Step.NONE, "已回到首页", 0));
-          s.setUpdatedAt(now);
-          s.setStateEnteredAt(now);
+      // COUNTDOWN 兜底：15s -> IDLE
+      if (s.getState() == SessionState.COUNTDOWN && seconds > 15) {
+        synchronized (s) {
+          safeFinish(s.getSessionId(), "TIMEOUT_COUNTDOWN");
+        }
+        continue;
+      }
 
-          s.setCaptureJobRunning(false);
-          s.setAiJobRunning(false);
-          s.setDownloadToken(null);
-          s.setDownloadUrl(null);
+      // PROCESSING 30s -> IDLE（Day7 要求更敏捷的回收）
+      if (s.getState() == SessionState.PROCESSING && seconds > 30) {
+        synchronized (s) {
+          safeFinish(s.getSessionId(), "TIMEOUT_PROCESSING");
         }
         continue;
       }
@@ -61,43 +61,37 @@ public class SessionSweeper {
       // PREVIEW 30s -> IDLE
       if (s.getState() == SessionState.PREVIEW && seconds > 30) {
         synchronized (s) {
-          s.setState(SessionState.IDLE);
-          s.setProgress(new SessionProgress(SessionProgress.Step.NONE, "预览超时，已回到首页", 0));
-          s.setUpdatedAt(now);
-          s.setStateEnteredAt(now);
-          s.setDownloadToken(null);
-          s.setDownloadUrl(null);
+          safeFinish(s.getSessionId(), "TIMEOUT_PREVIEW");
         }
         continue;
       }
 
-      // DELIVERING 30s -> DONE -> IDLE（你也可以直接 IDLE）
+      // DELIVERING 30s -> IDLE
       if (s.getState() == SessionState.DELIVERING && seconds > 30) {
         synchronized (s) {
-          s.setState(SessionState.DONE);
-          s.setProgress(new SessionProgress(SessionProgress.Step.DELIVERY_READY, "已完成", 100));
-          s.setUpdatedAt(now);
-          s.setStateEnteredAt(now);
-
-          s.setState(SessionState.IDLE);
-          s.setProgress(new SessionProgress(SessionProgress.Step.NONE, "已回到首页", 0));
-          s.setUpdatedAt(now);
-          s.setStateEnteredAt(now);
+          safeFinish(s.getSessionId(), "TIMEOUT_DELIVERING");
         }
         continue;
       }
 
-      // DONE 若还停留也回收（保险）
+      // DONE 5s -> IDLE（快速回收）
       if (s.getState() == SessionState.DONE && seconds > 5) {
         synchronized (s) {
-          s.setState(SessionState.IDLE);
-          s.setProgress(new SessionProgress(SessionProgress.Step.NONE, "已回到首页", 0));
-          s.setUpdatedAt(now);
-          s.setStateEnteredAt(now);
+          safeFinish(s.getSessionId(), "AUTO_RECYCLE_DONE");
         }
       }
     }
 
+    // 清理过期 token 和幂等缓存
     deliveryService.cleanupExpired();
+    idempotencyService.cleanupExpired();
+  }
+
+  private void safeFinish(String sessionId, String reason) {
+    try {
+      sessionService.finish(sessionId, reason);
+    } catch (Exception ignored) {
+      // finish 自己可能因为状态机限制失败；Day7 应尽量避免这种情况
+    }
   }
 }

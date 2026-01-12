@@ -36,7 +36,7 @@ public class DeliveryService {
     return r;
   }
 
-  public DeliveryRecord getValid(String token) {
+  public DeliveryRecord getValid(String token) {   // may return null
     DeliveryRecord r = tokenStore.get(token);
     if (r == null) return null;
     if (OffsetDateTime.now().isAfter(r.getExpiresAt())) {
