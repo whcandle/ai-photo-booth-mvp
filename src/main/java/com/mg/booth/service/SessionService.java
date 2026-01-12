@@ -35,7 +35,7 @@ public class SessionService {
     TemplateService templateService,
     SessionStateMachine sm,
     StorageService storageService,
-    @Qualifier("mockCameraService")CameraService cameraService,
+    @Qualifier("usbCameraService")CameraService cameraService,
     MockAiService mockAiService,
     @Qualifier("boothExecutor") Executor boothExecutor,
     DeliveryService deliveryService
