@@ -56,22 +56,50 @@
 
 
 
+<!--    <dependency>-->
+<!--      <groupId>org.openpnp</groupId>-->
+<!--      <artifactId>opencv</artifactId>-->
+<!--      <version>4.9.0-0</version>-->
+<!--    </dependency>-->
+
+<!--    &lt;!&ndash; 1) Java API：必须要有（不带 classifier） &ndash;&gt;-->
+<!--    <dependency>-->
+<!--      <groupId>org.bytedeco</groupId>-->
+<!--      <artifactId>opencv</artifactId>-->
+<!--      <version>4.9.0-1.5.10</version>-->
+<!--    </dependency>-->
+
+<!--    &lt;!&ndash; 2) 原生库：Windows x86_64 &ndash;&gt;-->
+<!--    <dependency>-->
+<!--      <groupId>org.bytedeco</groupId>-->
+<!--      <artifactId>opencv</artifactId>-->
+<!--      <version>4.9.0-1.5.10</version>-->
+<!--      <classifier>windows-x86_64</classifier>-->
+<!--    </dependency>-->
+
+<!--    &lt;!&ndash; 建议显式加（版本要对齐 1.5.10） &ndash;&gt;-->
+<!--    <dependency>-->
+<!--      <groupId>org.bytedeco</groupId>-->
+<!--      <artifactId>javacpp</artifactId>-->
+<!--      <version>1.5.10</version>-->
+<!--    </dependency>-->
+
+
     <dependency>
-      <groupId>org.openpnp</groupId>
-      <artifactId>opencv</artifactId>
-      <version>4.9.0-0</version>
+      <groupId>org.bytedeco</groupId>
+      <artifactId>opencv-platform</artifactId>
+      <version>4.9.0-1.5.10</version>
     </dependency>
 
 
-
     <!-- 可选：Lombok（如果你不想用 Lombok，就不要加这段） -->
-    <!--
+
     <dependency>
       <groupId>org.projectlombok</groupId>
       <artifactId>lombok</artifactId>
       <optional>true</optional>
     </dependency>
-    -->
+
   </dependencies>
 
 

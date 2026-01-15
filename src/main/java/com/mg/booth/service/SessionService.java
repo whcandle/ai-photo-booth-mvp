@@ -211,6 +211,19 @@ public class SessionService {
         areq.setTemplateId(tpl.getTemplateId());
         areq.setRawPath(rawPath.toString());
 
+
+        // options/output（MVP：先给默认值；以后可从前端传）
+        areq.setOptions(Map.of(
+                "bgMode", "STATIC",
+                "segmentation", "AUTO",
+                "featherPx", 6,
+                "strength", 0.6
+        ));
+        areq.setOutput(Map.of(
+                "previewWidth", 900,
+                "finalWidth", 1800
+        ));
+
         String idemKey = sessionId + "#" + attemptIndex + "#" + tpl.getTemplateId();
 
         // 4) 调用 AI Gateway
@@ -219,7 +232,12 @@ public class SessionService {
           s.setUpdatedAt(OffsetDateTime.now());
         }
 
-        AiProcessResponse aresp = aiGatewayClient.process(idemKey, areq);
+        // deviceId 建议从 boothProps 注入（或写死 kiosk-001）
+        String deviceId = boothProps.getDeviceId();
+
+        AiProcessResponse aresp = aiGatewayClient.process(deviceId, idemKey, areq);
+
+        //AiProcessResponse aresp = aiGatewayClient.process(idemKey, areq);
 
         if (aresp == null || !aresp.isOk()) {
           String reason = (aresp == null || aresp.getError() == null)

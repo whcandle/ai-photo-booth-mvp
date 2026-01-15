@@ -8,3 +8,9 @@ spring:
 logging:
   level:
     root: INFO
+
+booth:
+  deviceId: kiosk-001
+  gatewayBaseUrl: http://localhost:8081
+  sharedRawBaseDir: "D:/AICreama/booth/data/raw"
+
