@@ -1,6 +1,10 @@
 package com.mg.booth.service;
 
 import com.mg.booth.camera.CameraService;
+import com.mg.booth.client.AiGatewayClient;
+import com.mg.booth.client.dto.AiProcessRequest;
+import com.mg.booth.client.dto.AiProcessResponse;
+import com.mg.booth.config.BoothProps;
 import com.mg.booth.domain.Session;
 import com.mg.booth.domain.SessionProgress;
 import com.mg.booth.domain.SessionState;
@@ -13,6 +17,8 @@ import com.mg.booth.exception.NotFoundException;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.UUID;
@@ -30,6 +36,8 @@ public class SessionService {
   private final MockAiService mockAiService;
   private final Executor boothExecutor;
   private final DeliveryService deliveryService;
+  private final AiGatewayClient aiGatewayClient;
+  private final BoothProps boothProps;
 
   public SessionService(
     TemplateService templateService,
@@ -38,7 +46,9 @@ public class SessionService {
     @Qualifier("usbCameraService")CameraService cameraService,
     MockAiService mockAiService,
     @Qualifier("boothExecutor") Executor boothExecutor,
-    DeliveryService deliveryService
+    DeliveryService deliveryService,
+    AiGatewayClient aiGatewayClient,
+    BoothProps boothProps
   ) {
     this.templateService = templateService;
     this.sm = sm;
@@ -47,8 +57,11 @@ public class SessionService {
     this.mockAiService = mockAiService;
     this.boothExecutor = boothExecutor;
     this.deliveryService = deliveryService;
+    this.aiGatewayClient = aiGatewayClient;
+    this.boothProps = boothProps;
   }
 
+  //类似会话状态机的切换按钮
   private void enterState(Session s, SessionState to, SessionProgress progress) {
     s.setState(to);
     s.setProgress(progress);
@@ -152,16 +165,19 @@ public class SessionService {
     }
 
     int attemptIndex = s.getAttemptIndex();
-    var rawPath = storageService.rawFilePath(sessionId, attemptIndex);
+
+    // 使用共享目录作为 rawPath，供后端 pipeline 读取
+    Path rawPath = Paths.get(boothProps.getSharedRawBaseDir(), sessionId, attemptIndex + ".jpg");
     storageService.ensureDir(rawPath.getParent());
 
     boothExecutor.execute(() -> {
       try {
-        // 1) Mock camera
+        // 1) 拍照到共享目录
         cameraService.captureTo(rawPath);
 
         synchronized (s) {
-          s.setRawUrl(storageService.rawUrl(sessionId, attemptIndex));
+          // 这里直接保存实际 rawPath，MVP 阶段前端只要能展示就行
+          s.setRawUrl(rawPath.toString());
           s.setCaptureJobRunning(false);
 
           // enter PROCESSING
@@ -180,31 +196,41 @@ public class SessionService {
           s.setUpdatedAt(OffsetDateTime.now());
         }
 
-        // 3) Progress: AI processing
-        Thread.sleep(800);
+        // 3) 组装 gateway 请求（带 FULL template）
+        var tpl = templateService.listTemplates().stream()
+          .filter(t -> t.isEnabled() && t.getTemplateId().equals(s.getTemplateId()))
+          .findFirst()
+          .orElseThrow(() -> new RuntimeException("Template not found: " + s.getTemplateId()));
+
+        // 当前 MVP 的 TemplateSummary 只有 id/name/enabled，这里先只传最小字段。
+        // 后续你扩展 TemplateSummary 字段时，可以这在里补齐 pipeline 需要的字段。
+
+        AiProcessRequest areq = new AiProcessRequest();
+        areq.setSessionId(sessionId);
+        areq.setAttemptIndex(attemptIndex);
+        areq.setTemplateId(tpl.getTemplateId());
+        areq.setRawPath(rawPath.toString());
+
+        String idemKey = sessionId + "#" + attemptIndex + "#" + tpl.getTemplateId();
+
+        // 4) 调用 AI Gateway
         synchronized (s) {
           s.setProgress(new SessionProgress(SessionProgress.Step.AI_PROCESSING, "AI处理中…", 60));
           s.setUpdatedAt(OffsetDateTime.now());
         }
 
-        // 4) Mock AI work: generate preview/final
-        var previewPath = storageService.previewFilePath(sessionId, attemptIndex);
-        var finalPath = storageService.finalFilePath(sessionId, attemptIndex);
-        storageService.ensureDir(previewPath.getParent());
-        storageService.ensureDir(finalPath.getParent());
+        AiProcessResponse aresp = aiGatewayClient.process(idemKey, areq);
 
-        // 再推进一点进度
-        Thread.sleep(600);
-        synchronized (s) {
-          s.setProgress(new SessionProgress(SessionProgress.Step.PREVIEW_READY, "生成预览…", 80));
-          s.setUpdatedAt(OffsetDateTime.now());
+        if (aresp == null || !aresp.isOk()) {
+          String reason = (aresp == null || aresp.getError() == null)
+            ? "gateway_failed"
+            : (aresp.getError().getCode() + ":" + aresp.getError().getMessage());
+          throw new RuntimeException("AI Gateway failed: " + reason);
         }
 
-        mockAiService.process(rawPath, previewPath, finalPath);
-
         synchronized (s) {
-          s.setPreviewUrl(storageService.previewUrl(sessionId, attemptIndex));
-          s.setFinalUrl(storageService.finalUrl(sessionId, attemptIndex));
+          s.setPreviewUrl(aresp.getPreviewUrl());
+          s.setFinalUrl(aresp.getFinalUrl());
           s.setProgress(new SessionProgress(SessionProgress.Step.FINAL_READY, "生成成品…", 95));
           s.setUpdatedAt(OffsetDateTime.now());
         }
