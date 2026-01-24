@@ -14,6 +14,7 @@ import com.mg.booth.dto.CreateSessionRequest;
 import com.mg.booth.dto.SelectTemplateRequest;
 import com.mg.booth.exception.ConflictException;
 import com.mg.booth.exception.NotFoundException;
+import com.mg.booth.util.RawPathUtil;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
@@ -43,7 +44,7 @@ public class SessionService {
     TemplateService templateService,
     SessionStateMachine sm,
     StorageService storageService,
-    @Qualifier("usbCameraService")CameraService cameraService,
+    @Qualifier("cameraAgentCameraService")CameraService cameraService,
     MockAiService mockAiService,
     @Qualifier("boothExecutor") Executor boothExecutor,
     DeliveryService deliveryService,
@@ -166,8 +167,14 @@ public class SessionService {
 
     int attemptIndex = s.getAttemptIndex();
 
-    // 使用共享目录作为 rawPath，供后端 pipeline 读取
-    Path rawPath = Paths.get(boothProps.getSharedRawBaseDir(), sessionId, attemptIndex + ".jpg");
+    // ✅ 改：按 sess_{sessionId}/IMG_{timestamp}.jpg 生成
+    Path rawPath;
+    try {
+      rawPath = RawPathUtil.buildTargetFile(boothProps.getSharedRawBaseDir(), sessionId);
+    } catch (Exception e) {
+      throw new RuntimeException("Failed to build raw target file", e);
+    }
+
     storageService.ensureDir(rawPath.getParent());
 
     boothExecutor.execute(() -> {

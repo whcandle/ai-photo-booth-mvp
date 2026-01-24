@@ -43,5 +43,10 @@ public class MockCameraService implements CameraService {
       throw new RuntimeException("Mock camera capture failed", e);
     }
   }
+
+  @Override
+  public CameraStatus getStatus() throws Exception {
+    return null;
+  }
 }
 

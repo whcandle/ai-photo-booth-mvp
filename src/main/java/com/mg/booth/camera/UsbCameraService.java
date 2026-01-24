@@ -51,11 +51,15 @@ public class UsbCameraService implements CameraService {
             }
 
         } finally {
-            // 释放资源（服务端一定要做）
             if (camera != null) {
                 camera.release();
             }
             frame.release();
         }
+    }
+
+    @Override
+    public CameraStatus getStatus() throws Exception {
+        return null;
     }
 }
