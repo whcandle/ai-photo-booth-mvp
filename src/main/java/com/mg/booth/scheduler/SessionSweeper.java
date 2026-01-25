@@ -42,6 +42,14 @@ public class SessionSweeper {
         continue;
       }
 
+      // LIVE_PREVIEW 30s -> IDLE（Phase 4: 取景超时回收）
+      if (s.getState() == SessionState.LIVE_PREVIEW && seconds > 30) {
+        synchronized (s) {
+          safeFinish(s.getSessionId(), "TIMEOUT_LIVE_PREVIEW");
+        }
+        continue;
+      }
+
       // COUNTDOWN 兜底：15s -> IDLE
       if (s.getState() == SessionState.COUNTDOWN && seconds > 15) {
         synchronized (s) {

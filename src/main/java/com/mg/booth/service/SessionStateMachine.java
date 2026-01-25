@@ -17,9 +17,12 @@ public class SessionStateMachine {
     // CreateSession: (virtual) IDLE -> SELECTING
     allowed.put(SessionState.IDLE, EnumSet.of(SessionState.SELECTING));
 
-    // SelectTemplate: SELECTING -> COUNTDOWN
+    // SelectTemplate: SELECTING -> LIVE_PREVIEW (策略2: 一起改，直接走取景)
     // Day7: 允许 SELECTING -> IDLE（取消/超时回收）
-    allowed.put(SessionState.SELECTING, EnumSet.of(SessionState.COUNTDOWN, SessionState.IDLE));
+    allowed.put(SessionState.SELECTING, EnumSet.of(SessionState.LIVE_PREVIEW, SessionState.IDLE));
+
+    // Live preview -> countdown
+    allowed.put(SessionState.LIVE_PREVIEW, EnumSet.of(SessionState.COUNTDOWN, SessionState.IDLE));
 
     // Capture: COUNTDOWN -> CAPTURING
     // 允许 COUNTDOWN -> IDLE：取消/超时回收

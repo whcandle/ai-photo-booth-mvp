@@ -17,6 +17,10 @@ public class Session {
   private String downloadToken;
   private String downloadUrl;
 
+  // Phase 4: 相机预览 URL（下发给前端，避免前端写死端口）
+  private String cameraPreviewUrl;
+  private String cameraStatusUrl;
+
   // Day3: 防重复启动 capture job
   private boolean captureJobRunning;
 
@@ -86,6 +90,12 @@ public class Session {
 
   public String getDownloadUrl() { return downloadUrl; }
   public void setDownloadUrl(String downloadUrl) { this.downloadUrl = downloadUrl; }
+
+  public String getCameraPreviewUrl() { return cameraPreviewUrl; }
+  public void setCameraPreviewUrl(String cameraPreviewUrl) { this.cameraPreviewUrl = cameraPreviewUrl; }
+
+  public String getCameraStatusUrl() { return cameraStatusUrl; }
+  public void setCameraStatusUrl(String cameraStatusUrl) { this.cameraStatusUrl = cameraStatusUrl; }
 
   public boolean isCaptureJobRunning() { return captureJobRunning; }
   public void setCaptureJobRunning(boolean captureJobRunning) { this.captureJobRunning = captureJobRunning; }

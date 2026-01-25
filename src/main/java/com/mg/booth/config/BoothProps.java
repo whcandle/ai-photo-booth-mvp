@@ -8,6 +8,7 @@ public class BoothProps {
   private String deviceId;
   private String gatewayBaseUrl;
   private String sharedRawBaseDir;
+  private String cameraAgentBaseUrl;
 
   public String getDeviceId() {
     return deviceId;
@@ -31,6 +32,14 @@ public class BoothProps {
 
   public void setSharedRawBaseDir(String sharedRawBaseDir) {
     this.sharedRawBaseDir = sharedRawBaseDir;
+  }
+
+  public String getCameraAgentBaseUrl() {
+    return cameraAgentBaseUrl;
+  }
+
+  public void setCameraAgentBaseUrl(String cameraAgentBaseUrl) {
+    this.cameraAgentBaseUrl = cameraAgentBaseUrl;
   }
 }
 

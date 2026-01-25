@@ -95,6 +95,13 @@ public class SessionService {
     s.setPreviewUrl(null);
     s.setFinalUrl(null);
 
+    // Phase 4: 初始化相机预览 URL（下发给前端）
+    String cameraBaseUrl = boothProps.getCameraAgentBaseUrl();
+    if (cameraBaseUrl != null && !cameraBaseUrl.isEmpty()) {
+      s.setCameraPreviewUrl(cameraBaseUrl + "/preview");
+      s.setCameraStatusUrl(cameraBaseUrl + "/status");
+    }
+
     s.setCaptureJobRunning(false);
     s.setAiJobRunning(false);
     s.setError(null);
@@ -123,12 +130,31 @@ public class SessionService {
       throw new NotFoundException("Template not found or disabled: " + req.getTemplateId());
     }
 
-    if (!sm.canTransition(s.getState(), SessionState.COUNTDOWN)) {
+    // Phase 4: 策略2一起改，选完模板直接进入 LIVE_PREVIEW（取景）
+    if (!sm.canTransition(s.getState(), SessionState.LIVE_PREVIEW)) {
       throw new ConflictException("INVALID_STATE", "Action not allowed in current state: " + s.getState());
     }
 
     s.setTemplateId(req.getTemplateId());
     s.setError(null);
+    enterState(s, SessionState.LIVE_PREVIEW, new SessionProgress(SessionProgress.Step.NONE, "请取景，准备拍照", 0));
+    System.out.println("[SessionService] selectTemplate: sessionId=" + sessionId + ", newState=" + s.getState() + ", cameraPreviewUrl=" + s.getCameraPreviewUrl());
+    return s;
+  }
+
+  /**
+   * Phase 4: 从 LIVE_PREVIEW 进入 COUNTDOWN（用户点击"开始拍照"）
+   */
+  public Session enterCountdown(String sessionId) {
+    Session s = get(sessionId);
+
+    // 幂等：已经是 COUNTDOWN 就直接返回
+    if (s.getState() == SessionState.COUNTDOWN) return s;
+
+    if (!sm.canTransition(s.getState(), SessionState.COUNTDOWN)) {
+      throw new ConflictException("INVALID_STATE", "Action not allowed in current state: " + s.getState());
+    }
+
     enterState(s, SessionState.COUNTDOWN, new SessionProgress(SessionProgress.Step.NONE, "准备倒计时", 0));
     return s;
   }

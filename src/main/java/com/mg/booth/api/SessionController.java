@@ -119,4 +119,19 @@ public class SessionController {
       () -> sessionService.confirm(sessionId)
     );
   }
+
+  /**
+   * Phase 4: 从 LIVE_PREVIEW 进入 COUNTDOWN（用户点击"开始拍照"）
+   */
+  @PostMapping("/sessions/{sessionId}/countdown")
+  public Session countdown(
+    @RequestHeader(value = "Idempotency-Key", required = false) String idem,
+    @PathVariable String sessionId
+  ) {
+    String key = idemKey(idem);
+    String fp = "POST /api/v1/sessions/" + sessionId + "/countdown";
+    return idempotencyService.getOrCompute(key, fp, Session.class, 120,
+      () -> sessionService.enterCountdown(sessionId)
+    );
+  }
 }
