@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
 import java.io.InputStream;
@@ -15,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 
 @Service("cameraAgentCameraService")
+@Primary
 public class CameraAgentCameraService implements CameraService {
 
     private static final Logger log = LoggerFactory.getLogger(CameraAgentCameraService.class);
@@ -112,6 +114,36 @@ public class CameraAgentCameraService implements CameraService {
                 + ", sdkInitialized=" + status.sdkInitialized
                 + ", sessionOpened=" + status.sessionOpened);
         }
+    }
+
+    @Override
+    public void setProperty(String key, Integer value, boolean persist) throws Exception {
+        URL url = new URL(baseUrl + "/property/set");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setConnectTimeout(timeoutMs);
+        conn.setReadTimeout(timeoutMs);
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setDoOutput(true);
+
+        String body = String.format("{\"key\":\"%s\",\"value\":%d,\"persist\":%s}",
+            escapeJson(key), value, persist);
+        try (OutputStream os = conn.getOutputStream()) {
+            os.write(body.getBytes(StandardCharsets.UTF_8));
+        }
+
+        int code = conn.getResponseCode();
+        InputStream is = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
+        JsonNode resp = om.readTree(is);
+
+        boolean ok = resp.path("ok").asBoolean(false);
+        if (!ok) {
+            String err = resp.path("error").asText("unknown");
+            throw new RuntimeException("CameraAgent setProperty failed: key=" + key
+                + ", value=" + value + ", error=" + err);
+        }
+
+        log.debug("CameraAgent setProperty ok: key={}, value={}, persist={}", key, value, persist);
     }
 
     private static String escapeJson(String s) {

@@ -2,6 +2,7 @@ package com.mg.booth.camera;
 
 
 import java.nio.file.Path;
+import java.util.Map;
 
 public interface CameraService {
 
@@ -16,6 +17,26 @@ public interface CameraService {
      * Returns null if status check fails.
      */
     CameraStatus getStatus() throws Exception;
+
+    /**
+     * Set a single camera property.
+     * @param key Property key (ISO, WB, ExposureComp, PictureStyle)
+     * @param value EDSDK encoded value
+     * @param persist Whether to persist to config.json
+     */
+    void setProperty(String key, Integer value, boolean persist) throws Exception;
+
+    /**
+     * Apply multiple camera properties in batch.
+     * @param props Map of property key to EDSDK encoded value
+     * @param persist Whether to persist to config.json
+     * @throws Exception if any property fails (fail-fast)
+     */
+    default void applyProperties(Map<String, Integer> props, boolean persist) throws Exception {
+        for (Map.Entry<String, Integer> entry : props.entrySet()) {
+            setProperty(entry.getKey(), entry.getValue(), persist);
+        }
+    }
 
     /**
      * Camera service status DTO.
