@@ -146,6 +146,64 @@ public class CameraAgentCameraService implements CameraService {
         log.debug("CameraAgent setProperty ok: key={}, value={}, persist={}", key, value, persist);
     }
 
+    @Override
+    public void startPreview() throws Exception {
+        URL url = new URL(baseUrl + "/preview/start");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setConnectTimeout(timeoutMs);
+        conn.setReadTimeout(timeoutMs);
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setDoOutput(true);
+
+        // 提供空的 JSON body（避免 411 错误）
+        String body = "{}";
+        try (OutputStream os = conn.getOutputStream()) {
+            os.write(body.getBytes(StandardCharsets.UTF_8));
+        }
+
+        int code = conn.getResponseCode();
+        InputStream is = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
+        JsonNode resp = om.readTree(is);
+
+        boolean ok = resp.path("ok").asBoolean(false);
+        if (!ok) {
+            String err = resp.path("error").asText("unknown");
+            throw new RuntimeException("CameraAgent startPreview failed: error=" + err);
+        }
+
+        log.debug("CameraAgent startPreview ok");
+    }
+
+    @Override
+    public void stopPreview() throws Exception {
+        URL url = new URL(baseUrl + "/preview/stop");
+        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+        conn.setConnectTimeout(timeoutMs);
+        conn.setReadTimeout(timeoutMs);
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Content-Type", "application/json");
+        conn.setDoOutput(true);
+
+        // 提供空的 JSON body（避免 411 错误）
+        String body = "{}";
+        try (OutputStream os = conn.getOutputStream()) {
+            os.write(body.getBytes(StandardCharsets.UTF_8));
+        }
+
+        int code = conn.getResponseCode();
+        InputStream is = (code >= 200 && code < 300) ? conn.getInputStream() : conn.getErrorStream();
+        JsonNode resp = om.readTree(is);
+
+        boolean ok = resp.path("ok").asBoolean(false);
+        if (!ok) {
+            String err = resp.path("error").asText("unknown");
+            throw new RuntimeException("CameraAgent stopPreview failed: error=" + err);
+        }
+
+        log.debug("CameraAgent stopPreview ok");
+    }
+
     private static String escapeJson(String s) {
         return s.replace("\\", "\\\\").replace("\"", "\\\"");
     }

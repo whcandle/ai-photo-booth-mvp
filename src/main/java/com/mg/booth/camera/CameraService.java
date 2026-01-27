@@ -39,6 +39,24 @@ public interface CameraService {
     }
 
     /**
+     * Start camera preview (idempotent).
+     * @throws Exception if preview start fails
+     */
+    default void startPreview() throws Exception {
+        // Default implementation: do nothing
+        // CameraAgentCameraService will implement via HTTP call
+    }
+
+    /**
+     * Stop camera preview (idempotent).
+     * @throws Exception if preview stop fails
+     */
+    default void stopPreview() throws Exception {
+        // Default implementation: do nothing
+        // CameraAgentCameraService will implement via HTTP call
+    }
+
+    /**
      * Camera service status DTO.
      */
     class CameraStatus {
