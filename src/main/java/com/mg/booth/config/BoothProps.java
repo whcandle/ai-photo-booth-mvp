@@ -9,6 +9,10 @@ public class BoothProps {
   private String gatewayBaseUrl;
   private String sharedRawBaseDir;
   private String cameraAgentBaseUrl;
+  
+  // ====== Platform API 配置 ======
+  private String platformBaseUrl = "http://127.0.0.1:8080";
+  private String deviceIdentityFile = "device.json";
 
   public String getDeviceId() {
     return deviceId;
@@ -40,6 +44,22 @@ public class BoothProps {
 
   public void setCameraAgentBaseUrl(String cameraAgentBaseUrl) {
     this.cameraAgentBaseUrl = cameraAgentBaseUrl;
+  }
+
+  public String getPlatformBaseUrl() {
+    return platformBaseUrl;
+  }
+
+  public void setPlatformBaseUrl(String platformBaseUrl) {
+    this.platformBaseUrl = platformBaseUrl;
+  }
+
+  public String getDeviceIdentityFile() {
+    return deviceIdentityFile;
+  }
+
+  public void setDeviceIdentityFile(String deviceIdentityFile) {
+    this.deviceIdentityFile = deviceIdentityFile;
   }
 }
 

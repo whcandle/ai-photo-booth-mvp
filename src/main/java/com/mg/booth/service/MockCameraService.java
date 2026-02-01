@@ -48,5 +48,10 @@ public class MockCameraService implements CameraService {
   public CameraStatus getStatus() throws Exception {
     return null;
   }
+
+  @Override
+  public void setProperty(String key, Integer value, boolean persist) throws Exception {
+
+  }
 }
 

@@ -1,0 +1,8 @@
+{
+  "platformBaseUrl": "http://127.0.0.1:8089",
+  "deviceCode": "dev_001",
+  "secret": "dev_001_secret",
+  "deviceId": null,
+  "deviceToken": null,
+  "tokenExpiresAt": null
+}

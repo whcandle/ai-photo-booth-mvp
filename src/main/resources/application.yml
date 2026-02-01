@@ -16,4 +16,6 @@ booth:
   cameraAgentBaseUrl: "http://127.0.0.1:18080"
   cameraAgentTimeoutMs: 65000  # 比 CameraAgent 的 60s 稍大一点
   cameraAgentCheckStatusBeforeCapture: true  # 拍照前检查相机状态（推荐开启）
+  platformBaseUrl: "http://127.0.0.1:8089"  # Platform API 地址
+  deviceIdentityFile: "device.json"  # device.json 文件路径（运行目录）
 
