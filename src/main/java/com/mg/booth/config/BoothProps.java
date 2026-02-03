@@ -13,6 +13,9 @@ public class BoothProps {
   // ====== Platform API 配置 ======
   private String platformBaseUrl = "http://127.0.0.1:8080";
   private String deviceIdentityFile = "device.json";
+  
+  // ====== Camera 配置 ======
+  private String cameraConfigFile = "camera.json";
 
   public String getDeviceId() {
     return deviceId;
@@ -60,6 +63,14 @@ public class BoothProps {
 
   public void setDeviceIdentityFile(String deviceIdentityFile) {
     this.deviceIdentityFile = deviceIdentityFile;
+  }
+
+  public String getCameraConfigFile() {
+    return cameraConfigFile;
+  }
+
+  public void setCameraConfigFile(String cameraConfigFile) {
+    this.cameraConfigFile = cameraConfigFile;
   }
 }
 

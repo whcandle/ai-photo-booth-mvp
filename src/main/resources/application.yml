@@ -18,4 +18,5 @@ booth:
   cameraAgentCheckStatusBeforeCapture: true  # 拍照前检查相机状态（推荐开启）
   platformBaseUrl: "http://127.0.0.1:8089"  # Platform API 地址
   deviceIdentityFile: "device.json"  # device.json 文件路径（运行目录）
+  cameraConfigFile: "camera.json"  # camera.json 文件路径（运行目录）
 

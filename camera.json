@@ -1,0 +1,147 @@
+{
+  "cameraModel" : "Canon EOS R6",
+  "selectedCameraId" : "auto",
+  "activePresetId" : "preset_day_outdoor",
+  "params" : {
+    "iso" : 200,
+    "whiteBalance" : "DAYLIGHT",
+    "exposureCompensationEv" : 0.3,
+    "pictureStyle" : "PORTRAIT",
+    "aperture" : "F4.0",
+    "shutterSpeed" : "1/250",
+    "meteringMode" : "EVALUATIVE"
+  },
+  "presets" : [ {
+    "id" : "preset_day_outdoor",
+    "name" : "白天·室外",
+    "tags" : [ "day", "outdoor" ],
+    "params" : {
+      "iso" : 200,
+      "whiteBalance" : "DAYLIGHT",
+      "exposureCompensationEv" : 0.3,
+      "pictureStyle" : "PORTRAIT",
+      "aperture" : "F4.0",
+      "shutterSpeed" : "1/250",
+      "meteringMode" : "EVALUATIVE"
+    },
+    "legacyProfileId" : null,
+    "displayName" : "白天·室外",
+    "category" : "ENV"
+  }, {
+    "id" : "preset_night_indoor",
+    "name" : "夜晚·室内",
+    "tags" : [ "night", "indoor" ],
+    "params" : {
+      "iso" : 1600,
+      "whiteBalance" : "TUNGSTEN",
+      "exposureCompensationEv" : 0.3,
+      "pictureStyle" : "PORTRAIT",
+      "aperture" : "F2.8",
+      "shutterSpeed" : "1/60",
+      "meteringMode" : "CENTER_WEIGHTED"
+    },
+    "legacyProfileId" : null,
+    "displayName" : "夜晚·室内",
+    "category" : "ENV"
+  }, {
+    "id" : "preset_day_indoor",
+    "name" : "白天·室内",
+    "tags" : [ "day", "indoor" ],
+    "params" : {
+      "iso" : 400,
+      "whiteBalance" : "FLUORESCENT",
+      "exposureCompensationEv" : 0.0,
+      "pictureStyle" : "STANDARD",
+      "aperture" : "F4.0",
+      "shutterSpeed" : "1/125",
+      "meteringMode" : "EVALUATIVE"
+    },
+    "legacyProfileId" : null,
+    "displayName" : "白天·室内",
+    "category" : "ENV"
+  }, {
+    "id" : "preset_night_outdoor",
+    "name" : "夜晚·室外",
+    "tags" : [ "night", "outdoor" ],
+    "params" : {
+      "iso" : 800,
+      "whiteBalance" : "DAYLIGHT",
+      "exposureCompensationEv" : 0.0,
+      "pictureStyle" : "STANDARD",
+      "aperture" : "F2.8",
+      "shutterSpeed" : "1/125",
+      "meteringMode" : "EVALUATIVE"
+    },
+    "legacyProfileId" : null,
+    "displayName" : "夜晚·室外",
+    "category" : "ENV"
+  }, {
+    "id" : "preset_business_medical",
+    "name" : "医疗/养老标准记录",
+    "tags" : [ "business", "medical", "elderly" ],
+    "params" : {
+      "iso" : 0,
+      "whiteBalance" : "AUTO",
+      "exposureCompensationEv" : 0.0,
+      "pictureStyle" : "STANDARD",
+      "aperture" : null,
+      "shutterSpeed" : null,
+      "meteringMode" : null
+    },
+    "legacyProfileId" : "medical_standard",
+    "displayName" : "医疗/养老标准记录",
+    "category" : "BUSINESS"
+  }, {
+    "id" : "preset_business_idphoto",
+    "name" : "证件照/工牌",
+    "tags" : [ "business", "id", "photo" ],
+    "params" : {
+      "iso" : 0,
+      "whiteBalance" : "DAYLIGHT",
+      "exposureCompensationEv" : 0.0,
+      "pictureStyle" : "STANDARD",
+      "aperture" : null,
+      "shutterSpeed" : null,
+      "meteringMode" : null
+    },
+    "legacyProfileId" : "id_photo",
+    "displayName" : "证件照/工牌",
+    "category" : "BUSINESS"
+  }, {
+    "id" : "preset_business_expo_pretty",
+    "name" : "展会/活动讨喜",
+    "tags" : [ "business", "event", "marketing" ],
+    "params" : {
+      "iso" : 0,
+      "whiteBalance" : "AUTO",
+      "exposureCompensationEv" : 0.0,
+      "pictureStyle" : "PORTRAIT",
+      "aperture" : null,
+      "shutterSpeed" : null,
+      "meteringMode" : null
+    },
+    "legacyProfileId" : "event_marketing",
+    "displayName" : "展会/活动讨喜",
+    "category" : "BUSINESS"
+  }, {
+    "id" : "preset_business_family_archive",
+    "name" : "养老记录/家属留存",
+    "tags" : [ "business", "elder", "family" ],
+    "params" : {
+      "iso" : 0,
+      "whiteBalance" : "CLOUDY",
+      "exposureCompensationEv" : 0.0,
+      "pictureStyle" : "PORTRAIT",
+      "aperture" : null,
+      "shutterSpeed" : null,
+      "meteringMode" : null
+    },
+    "legacyProfileId" : "elder_care",
+    "displayName" : "养老记录/家属留存",
+    "category" : "BUSINESS"
+  } ],
+  "ui" : {
+    "lockOnCountdown" : true,
+    "autoRestoreAfterSession" : false
+  }
+}

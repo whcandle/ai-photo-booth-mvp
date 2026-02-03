@@ -3,6 +3,6 @@
   "deviceCode" : "dev_001",
   "secret" : "dev_001_secret",
   "deviceId" : 4,
-  "deviceToken" : "eyJhbGciOiJIUzM4NCJ9.eyJtZXJjaGFudElkIjoxLCJ0eXBlIjoiZGV2aWNlIiwiZGV2aWNlSWQiOjQsInN1YiI6ImRldmljZTo0IiwiaWF0IjoxNzY5OTMxOTU2LCJleHAiOjE3NzAwMTgzNTZ9.lJPxvV4vJkIh9tcJ8el58JqNlYx7fGc-avLSRdbMPmSuLtfIISCJZoNP9RY-KhT-",
-  "tokenExpiresAt" : 1770018356.470492500
+  "deviceToken" : "eyJhbGciOiJIUzM4NCJ9.eyJtZXJjaGFudElkIjoxLCJ0eXBlIjoiZGV2aWNlIiwiZGV2aWNlSWQiOjQsInN1YiI6ImRldmljZTo0IiwiaWF0IjoxNzcwMDMwMzQyLCJleHAiOjE3NzAxMTY3NDJ9.Y9DgQZexjomWvVMUBR0PeCQOJukQkMbn4OGxbExtR07OfTmCuwXoAHDd7okUZWW4",
+  "tokenExpiresAt" : 1770116742.438429400
 }
