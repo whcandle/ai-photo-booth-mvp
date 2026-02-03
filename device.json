@@ -2,7 +2,7 @@
   "platformBaseUrl" : "http://127.0.0.1:8089",
   "deviceCode" : "dev_001",
   "secret" : "dev_001_secret",
-  "deviceId" : 4,
-  "deviceToken" : "eyJhbGciOiJIUzM4NCJ9.eyJtZXJjaGFudElkIjoxLCJ0eXBlIjoiZGV2aWNlIiwiZGV2aWNlSWQiOjQsInN1YiI6ImRldmljZTo0IiwiaWF0IjoxNzcwMDMwMzQyLCJleHAiOjE3NzAxMTY3NDJ9.Y9DgQZexjomWvVMUBR0PeCQOJukQkMbn4OGxbExtR07OfTmCuwXoAHDd7okUZWW4",
-  "tokenExpiresAt" : 1770116742.438429400
+  "deviceId" : "4",
+  "deviceToken" : "eyJhbGciOiJIUzM4NCJ9.eyJtZXJjaGFudElkIjoxLCJ0eXBlIjoiZGV2aWNlIiwiZGV2aWNlSWQiOjQsInN1YiI6ImRldmljZTo0IiwiaWF0IjoxNzcwMTIwMzI1LCJleHAiOjE3NzAyMDY3MjV9.nWIKmOhMDQnwmBiW9z5TJPNnuRQHW6IxYGPEu51gJtc5vo-zxodSAiy59yuCDyFg",
+  "tokenExpiresAt" : "1770206725.580518100"
 }
