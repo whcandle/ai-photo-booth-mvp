@@ -12,6 +12,8 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.FileAttribute;
+import java.time.Instant;
+import java.util.Map;
 
 /**
  * device.json read/write utility
@@ -46,7 +48,81 @@ public class DeviceConfigStore {
       }
 
       String json = Files.readString(file);
-      DeviceConfig config = om.readValue(json, DeviceConfig.class);
+      
+      // First try to parse as Map to handle compatibility (deviceId might be Long in old format)
+      @SuppressWarnings("unchecked")
+      Map<String, Object> rawMap = om.readValue(json, Map.class);
+      
+      DeviceConfig config = new DeviceConfig();
+      
+      // Set writable fields
+      config.setPlatformBaseUrl(extractString(rawMap, "platformBaseUrl"));
+      config.setDeviceCode(extractString(rawMap, "deviceCode"));
+      config.setSecret(extractString(rawMap, "secret"));
+      
+      // Set read-only fields with compatibility handling
+      Object deviceIdObj = rawMap.get("deviceId");
+      if (deviceIdObj != null) {
+        // Handle both String and Long (backward compatibility)
+        if (deviceIdObj instanceof Long) {
+          config.setDeviceIdFromLong((Long) deviceIdObj);
+        } else if (deviceIdObj instanceof Number) {
+          config.setDeviceIdFromLong(((Number) deviceIdObj).longValue());
+        } else {
+          config.setDeviceId(String.valueOf(deviceIdObj));
+        }
+      }
+      
+      config.setDeviceToken(extractString(rawMap, "deviceToken"));
+      
+      // Handle tokenExpiresAt with compatibility (might be Instant serialized as number or ISO8601 string)
+      Object tokenExpiresAtObj = rawMap.get("tokenExpiresAt");
+      if (tokenExpiresAtObj != null) {
+        if (tokenExpiresAtObj instanceof String) {
+          String tokenExpiresAtStr = (String) tokenExpiresAtObj;
+          // Check if it's a valid ISO8601 string
+          try {
+            Instant.parse(tokenExpiresAtStr);
+            // Valid ISO8601, use it directly
+            config.setTokenExpiresAt(tokenExpiresAtStr);
+          } catch (Exception e) {
+            // Not valid ISO8601, might be a number string (backward compatibility)
+            try {
+              double timestamp = Double.parseDouble(tokenExpiresAtStr);
+              // Convert to Instant: treat as seconds with fractional part
+              long seconds = (long) timestamp;
+              long nanos = (long) ((timestamp - seconds) * 1e9);
+              Instant instant = Instant.ofEpochSecond(seconds, nanos);
+              config.setTokenExpiresAtFromInstant(instant);
+              log.info("[device-config] Converted tokenExpiresAt from number string {} to ISO8601: {}", 
+                  tokenExpiresAtStr, config.getTokenExpiresAt());
+            } catch (Exception ex) {
+              // Not a number either, keep as is
+              log.warn("[device-config] tokenExpiresAt is neither ISO8601 nor number: {}, keeping as is", tokenExpiresAtStr);
+              config.setTokenExpiresAt(tokenExpiresAtStr);
+            }
+          }
+        } else if (tokenExpiresAtObj instanceof Number) {
+          // Might be Unix timestamp (seconds or nanoseconds)
+          // Try to convert to Instant then to ISO8601
+          try {
+            double timestamp = ((Number) tokenExpiresAtObj).doubleValue();
+            // Convert to Instant: treat as seconds with fractional part
+            // e.g., 1770206725.580518100 = 1770206725 seconds + 0.580518100 seconds
+            long seconds = (long) timestamp;
+            long nanos = (long) ((timestamp - seconds) * 1e9);
+            Instant instant = Instant.ofEpochSecond(seconds, nanos);
+            config.setTokenExpiresAtFromInstant(instant);
+            log.info("[device-config] Converted tokenExpiresAt from number {} to ISO8601: {}", 
+                tokenExpiresAtObj, config.getTokenExpiresAt());
+          } catch (Exception e) {
+            log.warn("[device-config] Failed to parse tokenExpiresAt as timestamp: {}, using as string", tokenExpiresAtObj);
+            config.setTokenExpiresAt(String.valueOf(tokenExpiresAtObj));
+          }
+        } else {
+          config.setTokenExpiresAt(String.valueOf(tokenExpiresAtObj));
+        }
+      }
       
       // Ensure writable fields are not null
       if (config.getPlatformBaseUrl() == null) {
@@ -79,6 +155,9 @@ public class DeviceConfigStore {
   public void save(Path file, DeviceConfig config) {
     Path tmpFile = null;
     try {
+      // Normalize config before saving to ensure correct format
+      normalizeConfig(config);
+      
       String json = om.writerWithDefaultPrettyPrinter().writeValueAsString(config);
       
       // Ensure parent directory exists
@@ -124,5 +203,60 @@ public class DeviceConfigStore {
    */
   public Path getConfigPath(String configFile) {
     return Path.of(configFile);
+  }
+
+  /**
+   * Extract String value from map, return null if not found or empty
+   */
+  private String extractString(Map<String, Object> map, String key) {
+    Object value = map.get(key);
+    if (value == null) {
+      return null;
+    }
+    String str = String.valueOf(value);
+    return str.isEmpty() || "null".equals(str) ? null : str;
+  }
+
+  /**
+   * Normalize config before saving to ensure correct format:
+   * - deviceId must be String (not Long)
+   * - tokenExpiresAt must be ISO8601 String (not number or Instant)
+   */
+  private void normalizeConfig(DeviceConfig config) {
+    // Ensure deviceId is String
+    if (config.getDeviceId() != null) {
+      // If it's already a string, try to parse it to ensure it's valid
+      try {
+        Long.parseLong(config.getDeviceId());
+        // Valid number string, keep it
+      } catch (NumberFormatException e) {
+        // Not a valid number, might be corrupted, try to fix
+        log.warn("[device-config] deviceId is not a valid number string: {}, keeping as is", config.getDeviceId());
+      }
+    }
+    
+    // Ensure tokenExpiresAt is ISO8601 String
+    if (config.getTokenExpiresAt() != null && !config.getTokenExpiresAt().isBlank()) {
+      // Try to parse as ISO8601, if fails, try to convert from number string
+      try {
+        Instant.parse(config.getTokenExpiresAt());
+        // Valid ISO8601, keep it
+      } catch (Exception e) {
+        // Not valid ISO8601, try to parse as number string (backward compatibility)
+        try {
+          String oldValue = config.getTokenExpiresAt();
+          double timestamp = Double.parseDouble(oldValue);
+          // Convert to Instant: treat as seconds with fractional part
+          long seconds = (long) timestamp;
+          long nanos = (long) ((timestamp - seconds) * 1e9);
+          Instant instant = Instant.ofEpochSecond(seconds, nanos);
+          config.setTokenExpiresAtFromInstant(instant);
+          log.info("[device-config] Normalized tokenExpiresAt from number string {} to ISO8601: {}", 
+              oldValue, config.getTokenExpiresAt());
+        } catch (Exception ex) {
+          log.warn("[device-config] Failed to normalize tokenExpiresAt: {}, keeping as is", config.getTokenExpiresAt());
+        }
+      }
+    }
   }
 }

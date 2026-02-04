@@ -43,15 +43,18 @@ public class DeviceIdentityStore {
     }
   }
 
+  /**
+   * @deprecated 已禁用：device.json 的唯一写入入口是 DeviceConfigStore（原子写）。
+   * 此方法不再允许写入 device.json，以防止与 DeviceConfigStore 的写入冲突。
+   * 如需写入 device.json，请使用 DeviceConfigStore.save()。
+   */
+  @Deprecated
   public void save(Path file, DeviceIdentity id) {
-    try {
-      var json = om.writerWithDefaultPrettyPrinter().writeValueAsString(id);
-      Files.writeString(file, json);
-      log.info("[device] device.json updated: {}", file.toAbsolutePath());
-    } catch (Exception e) {
-      log.error("[device] Failed to save device identity to {}: {}", file.toAbsolutePath(), e.getMessage(), e);
-      // 保存失败不抛异常，只记录日志
-    }
+    log.error("[device] DeviceIdentityStore.save() is deprecated and disabled. " +
+        "Use DeviceConfigStore.save() instead to write device.json (atomic write). " +
+        "Attempted save to: {}", file.toAbsolutePath());
+    throw new UnsupportedOperationException(
+        "DeviceIdentityStore.save() is disabled. Use DeviceConfigStore.save() instead.");
   }
 
   /**

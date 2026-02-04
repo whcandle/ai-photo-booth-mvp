@@ -11,7 +11,6 @@ import org.springframework.context.annotation.Configuration;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * 设备启动自动同步 Runner
@@ -26,6 +25,8 @@ import java.util.Optional;
  * - 没有 device.json 或配置缺失不会导致启动失败
  * - 平台不可用不会导致启动失败
  * - 所有异常都被捕获，只记录日志
+ * 
+ * 注意：使用 DeviceConfigStore 作为 device.json 的唯一写入入口（原子写）
  */
 @Configuration
 public class DeviceBootstrapRunner {
@@ -35,7 +36,7 @@ public class DeviceBootstrapRunner {
   @Bean
   public ApplicationRunner deviceBootstrapApplicationRunner(
       BoothProps props,
-      @Qualifier("deviceDeviceIdentityStore") DeviceIdentityStore store,
+      DeviceConfigStore configStore,
       @Qualifier("devicePlatformDeviceApiClient") PlatformDeviceApiClient client) {
     return args -> {
       try {
@@ -46,55 +47,55 @@ public class DeviceBootstrapRunner {
           return;
         }
 
-        // B) 加载 device.json
+        // B) 加载 device.json（使用 DeviceConfigStore）
         Path file = Path.of(props.getDeviceIdentityFile());
-        Optional<DeviceIdentity> optId = store.load(file);
-        
-        if (optId.isEmpty()) {
-          log.warn("[device] device.json not found or invalid, skip platform sync.");
-          return;
-        }
-
-        DeviceIdentity id = optId.get();
+        DeviceConfig config = configStore.load(file);
 
         // C) 检查必填字段
-        if (id.getDeviceCode() == null || id.getDeviceCode().isBlank()
-            || id.getSecret() == null || id.getSecret().isBlank()) {
+        if (config.getDeviceCode() == null || config.getDeviceCode().isBlank()
+            || config.getSecret() == null || config.getSecret().isBlank()) {
           log.warn("[device] deviceCode/secret not configured in {}, skip platform sync.", 
               file.toAbsolutePath());
           return;
         }
 
         // 使用 device.json 中的 platformBaseUrl，如果没有则使用配置的
-        String baseUrl = (id.getPlatformBaseUrl() != null && !id.getPlatformBaseUrl().isBlank())
-            ? id.getPlatformBaseUrl()
+        String baseUrl = (config.getPlatformBaseUrl() != null && !config.getPlatformBaseUrl().isBlank())
+            ? config.getPlatformBaseUrl()
             : platformBaseUrl;
 
         // D) 检查是否需要 handshake
-        if (id.getDeviceId() == null || !store.isTokenValid(id)) {
-          log.info("[device] No valid token, handshake start. deviceCode={}", id.getDeviceCode());
+        if (config.getDeviceId() == null || config.getDeviceId().isBlank() || !config.isTokenValid()) {
+          log.info("[device] No valid token, handshake start. deviceCode={}", config.getDeviceCode());
           
           try {
-            HandshakeData hsData = client.handshake(baseUrl, id.getDeviceCode(), id.getSecret());
-            id.setDeviceId(hsData.deviceId());
-            id.setDeviceToken(hsData.deviceToken());
-            id.setTokenExpiresAt(hsData.tokenExpiresAt());
-            store.save(file, id);
+            HandshakeData hsData = client.handshake(baseUrl, config.getDeviceCode(), config.getSecret());
+            config.setDeviceIdFromLong(hsData.deviceId());
+            config.setDeviceToken(hsData.deviceToken());
+            config.setTokenExpiresAtFromInstant(hsData.tokenExpiresAt());
+            // 使用 DeviceConfigStore 保存（原子写）
+            configStore.save(file, config);
             log.info("[device] Handshake OK. deviceId={}, tokenExpiresAt={}", 
-                id.getDeviceId(), id.getTokenExpiresAt());
+                config.getDeviceId(), config.getTokenExpiresAt());
           } catch (Exception e) {
             log.error("[device] Handshake failed (non-fatal): {}", e.getMessage(), e);
             return; // handshake 失败，不再继续拉取 activities
           }
         } else {
           log.info("[device] Found valid token. deviceId={}, tokenExpiresAt={}", 
-              id.getDeviceId(), id.getTokenExpiresAt());
+              config.getDeviceId(), config.getTokenExpiresAt());
         }
 
         // E) 拉取 activities
         try {
+          Long deviceId = config.getDeviceIdAsLong();
+          if (deviceId == null) {
+            log.warn("[device] deviceId is null, skip activities");
+            return;
+          }
+          
           List<Map<String, Object>> activities = client.listActivities(
-              baseUrl, id.getDeviceId(), id.getDeviceToken());
+              baseUrl, deviceId, config.getDeviceToken());
           
           log.info("[device] activities.size={}", activities.size());
           

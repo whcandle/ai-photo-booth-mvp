@@ -47,14 +47,14 @@ public class PlatformSyncService {
         }
 
         Path file = Path.of(props.getDeviceIdentityFile());
-        Optional<DeviceIdentity> optId = store.load(file);
+        Optional<PlatformDeviceSession> optId = store.load(file);
         
         if (optId.isEmpty()) {
           log.warn("[platform] device.json not found or invalid, skip platform sync.");
           return;
         }
 
-        DeviceIdentity id = optId.get();
+        PlatformDeviceSession id = optId.get();
 
         // 检查 deviceCode 和 secret
         if (id.getDeviceCode() == null || id.getDeviceCode().isBlank()
@@ -76,7 +76,7 @@ public class PlatformSyncService {
     };
   }
 
-  private void ensureHandshake(Path file, DeviceIdentity id) {
+  private void ensureHandshake(Path file, PlatformDeviceSession id) {
     try {
       if (id.getToken() == null || id.getToken().isBlank() || id.getDeviceId() == null) {
         log.info("[platform] No token/deviceId, handshake start. platformBaseUrl={}", props.getPlatformBaseUrl());
@@ -95,7 +95,7 @@ public class PlatformSyncService {
     }
   }
 
-  private void pullActivitiesWithRetry(Path file, DeviceIdentity id) {
+  private void pullActivitiesWithRetry(Path file, PlatformDeviceSession id) {
     try {
       pullActivities(id);
     } catch (HttpClientErrorException e) {
@@ -122,7 +122,7 @@ public class PlatformSyncService {
     }
   }
 
-  private void pullActivities(DeviceIdentity id) {
+  private void pullActivities(PlatformDeviceSession id) {
     var acts = client.listActivities(props.getPlatformBaseUrl(), id.getDeviceId(), id.getToken());
     cachedActivities.set(acts);
 

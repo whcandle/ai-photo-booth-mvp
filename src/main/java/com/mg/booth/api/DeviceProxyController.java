@@ -1,8 +1,8 @@
 package com.mg.booth.api;
 
 import com.mg.booth.config.BoothProps;
-import com.mg.booth.device.DeviceIdentity;
-import com.mg.booth.device.DeviceIdentityStore;
+import com.mg.booth.device.DeviceConfig;
+import com.mg.booth.device.DeviceConfigStore;
 import com.mg.booth.device.PlatformDeviceApiClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,11 +15,12 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * 设备代理 Controller
  * 为 kiosk 提供本地代理接口，无需直接连接 platform
+ * 
+ * 注意：使用 DeviceConfigStore 读取 device.json（单一真源）
  */
 @RestController
 @RequestMapping("/api/v1/device")
@@ -28,15 +29,15 @@ public class DeviceProxyController {
   private static final Logger log = LoggerFactory.getLogger(DeviceProxyController.class);
 
   private final BoothProps props;
-  private final DeviceIdentityStore store;
+  private final DeviceConfigStore configStore;
   private final PlatformDeviceApiClient client;
 
   public DeviceProxyController(
       BoothProps props,
-      @Qualifier("deviceDeviceIdentityStore") DeviceIdentityStore store,
+      DeviceConfigStore configStore,
       @Qualifier("devicePlatformDeviceApiClient") PlatformDeviceApiClient client) {
     this.props = props;
-    this.store = store;
+    this.configStore = configStore;
     this.client = client;
   }
 
@@ -50,25 +51,20 @@ public class DeviceProxyController {
   @GetMapping("/activities")
   public Map<String, Object> getActivities() {
     try {
-      // 1. 加载 device.json
+      // 1. 加载 device.json（使用 DeviceConfigStore）
       Path file = Path.of(props.getDeviceIdentityFile());
-      Optional<DeviceIdentity> optId = store.load(file);
-
-      if (optId.isEmpty()) {
-        return createErrorResponse("device.json not found");
-      }
-
-      DeviceIdentity id = optId.get();
+      DeviceConfig config = configStore.load(file);
 
       // 2. 检查 deviceId 和 token
-      if (id.getDeviceId() == null || id.getDeviceToken() == null || id.getDeviceToken().isBlank()) {
+      if (config.getDeviceId() == null || config.getDeviceId().isBlank() 
+          || config.getDeviceToken() == null || config.getDeviceToken().isBlank()) {
         return createErrorResponse("device not handshaked yet");
       }
 
       // 3. 获取 platformBaseUrl
       String platformBaseUrl = props.getPlatformBaseUrl();
-      if (id.getPlatformBaseUrl() != null && !id.getPlatformBaseUrl().isBlank()) {
-        platformBaseUrl = id.getPlatformBaseUrl();
+      if (config.getPlatformBaseUrl() != null && !config.getPlatformBaseUrl().isBlank()) {
+        platformBaseUrl = config.getPlatformBaseUrl();
       }
 
       if (platformBaseUrl == null || platformBaseUrl.isBlank()) {
@@ -76,8 +72,13 @@ public class DeviceProxyController {
       }
 
       // 4. 调用 platform API
+      Long deviceId = config.getDeviceIdAsLong();
+      if (deviceId == null) {
+        return createErrorResponse("invalid deviceId");
+      }
+      
       List<Map<String, Object>> activities = client.listActivities(
-          platformBaseUrl, id.getDeviceId(), id.getDeviceToken());
+          platformBaseUrl, deviceId, config.getDeviceToken());
 
       // 5. 返回成功响应
       Map<String, Object> response = new HashMap<>();

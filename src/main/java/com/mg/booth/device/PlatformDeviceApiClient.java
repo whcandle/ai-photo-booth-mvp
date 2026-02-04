@@ -9,6 +9,8 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
@@ -36,9 +38,15 @@ public class PlatformDeviceApiClient {
    * @param deviceCode 设备编码
    * @param secret 设备密钥
    * @return HandshakeData 包含 deviceId, deviceToken, tokenExpiresAt
-   * @throws RuntimeException 如果 HTTP 非 2xx 或 success != true
+   * @throws PlatformCallException 如果平台调用失败
+   * @throws IllegalArgumentException 如果 baseUrl 为空
    */
   public HandshakeData handshake(String baseUrl, String deviceCode, String secret) {
+    // 检查 baseUrl 是否为空
+    if (baseUrl == null || baseUrl.isBlank()) {
+      throw new IllegalArgumentException("platformBaseUrl not configured");
+    }
+    
     String url = normalizeBaseUrl(baseUrl) + "/api/v1/device/handshake";
 
     // 构建请求体
@@ -64,9 +72,14 @@ public class PlatformDeviceApiClient {
 
       // 检查 HTTP 状态码
       if (!response.getStatusCode().is2xxSuccessful()) {
-        throw new RuntimeException(
-            String.format("Handshake failed: HTTP %s, response=%s",
-                response.getStatusCode(), response.getBody())
+        int statusCode = response.getStatusCode().value();
+        Object responseBody = response.getBody();
+        String reason = statusCode == 401 ? "unauthorized" : "http_error";
+        log.error("[device-api] Handshake failed: url={}, status={}, reason={}", url, statusCode, reason);
+        throw new PlatformCallException(
+            statusCode, url, reason,
+            String.format("Handshake failed: HTTP %s", response.getStatusCode()),
+            responseBody
         );
       }
 
@@ -108,18 +121,79 @@ public class PlatformDeviceApiClient {
 
       return new HandshakeData(deviceId, deviceToken, tokenExpiresAt);
 
+    } catch (HttpStatusCodeException e) {
+      // HTTP 状态码异常（4xx, 5xx）
+      int statusCode = e.getStatusCode().value();
+      String reason = statusCode == 401 ? "unauthorized" : "http_error";
+      Object responseBody = null;
+      try {
+        responseBody = e.getResponseBodyAs(Map.class);
+      } catch (Exception ex) {
+        // 如果无法解析响应体，使用原始字符串
+        responseBody = e.getResponseBodyAsString();
+      }
+      log.error("[device-api] Handshake failed: url={}, status={}, reason={}", url, statusCode, reason);
+      throw new PlatformCallException(
+          statusCode, url, reason,
+          String.format("Handshake failed: HTTP %s, %s", e.getStatusCode(), e.getMessage()),
+          responseBody
+      );
+    } catch (ResourceAccessException e) {
+      // 资源访问异常（超时、连接失败、DNS 解析失败等）
+      String reason = "unreachable";
+      String message = e.getMessage();
+      
+      // 检查 cause 是否是 UnknownHostException
+      Throwable cause = e.getCause();
+      if (cause != null) {
+        String causeClassName = cause.getClass().getSimpleName();
+        if (causeClassName.contains("UnknownHost") || causeClassName.contains("UnknownHostException")) {
+          reason = "dns";
+        } else if (causeClassName.contains("ConnectException") || causeClassName.contains("ConnectionRefused")) {
+          reason = "connection_refused";
+        } else if (causeClassName.contains("SocketTimeout") || causeClassName.contains("ReadTimeout")) {
+          reason = "timeout";
+        }
+      }
+      
+      // 如果 cause 检查没有识别，再检查 message
+      if ("unreachable".equals(reason) && message != null) {
+        String lowerMessage = message.toLowerCase();
+        if (lowerMessage.contains("timeout")) {
+          reason = "timeout";
+        } else if (lowerMessage.contains("unknownhost") || lowerMessage.contains("dns") || 
+                   lowerMessage.contains("unknown host")) {
+          reason = "dns";
+        } else if (lowerMessage.contains("connection refused") || lowerMessage.contains("connectionreset")) {
+          reason = "connection_refused";
+        }
+      }
+      
+      log.error("[device-api] Handshake failed: url={}, status=503, reason={}, message={}", url, reason, message);
+      throw new PlatformCallException(
+          503, url, reason,
+          String.format("Handshake failed: %s", message)
+      );
     } catch (RestClientException e) {
-      log.error("[device-api] Handshake request failed: {}", e.getMessage());
-      throw new RuntimeException("Handshake request failed: " + e.getMessage(), e);
+      // 其他 RestClientException
+      log.error("[device-api] Handshake failed: url={}, status=503, reason=unreachable, message={}", url, e.getMessage());
+      throw new PlatformCallException(
+          503, url, "unreachable",
+          String.format("Handshake failed: %s", e.getMessage())
+      );
     }
   }
 
   /**
    * 规范化 baseUrl：去掉末尾的 /
+   * 
+   * @param baseUrl Platform API 基础 URL
+   * @return 规范化后的 baseUrl（去掉末尾的 /）
+   * @throws IllegalArgumentException 如果 baseUrl 为空
    */
   private String normalizeBaseUrl(String baseUrl) {
     if (baseUrl == null || baseUrl.isBlank()) {
-      return "";
+      throw new IllegalArgumentException("platformBaseUrl not configured");
     }
     String normalized = baseUrl.trim();
     while (normalized.endsWith("/")) {
@@ -154,9 +228,15 @@ public class PlatformDeviceApiClient {
    * @param deviceId 设备ID
    * @param deviceToken 设备 token
    * @return 活动列表（Map 数组）
-   * @throws RuntimeException 如果 HTTP 非 2xx 或 success != true
+   * @throws PlatformCallException 如果平台调用失败
+   * @throws IllegalArgumentException 如果 baseUrl 为空
    */
   public java.util.List<Map<String, Object>> listActivities(String baseUrl, Long deviceId, String deviceToken) {
+    // 检查 baseUrl 是否为空
+    if (baseUrl == null || baseUrl.isBlank()) {
+      throw new IllegalArgumentException("platformBaseUrl not configured");
+    }
+    
     String url = normalizeBaseUrl(baseUrl) + "/api/v1/device/" + deviceId + "/activities";
 
     // 设置请求头
@@ -176,9 +256,14 @@ public class PlatformDeviceApiClient {
 
       // 检查 HTTP 状态码
       if (!response.getStatusCode().is2xxSuccessful()) {
-        throw new RuntimeException(
-            String.format("List activities failed: HTTP %s, response=%s",
-                response.getStatusCode(), response.getBody())
+        int statusCode = response.getStatusCode().value();
+        Object responseBody = response.getBody();
+        String reason = statusCode == 401 ? "unauthorized" : "http_error";
+        log.error("[device-api] List activities failed: url={}, status={}, reason={}", url, statusCode, reason);
+        throw new PlatformCallException(
+            statusCode, url, reason,
+            String.format("List activities failed: HTTP %s", response.getStatusCode()),
+            responseBody
         );
       }
 
@@ -214,9 +299,66 @@ public class PlatformDeviceApiClient {
 
       return activities;
 
+    } catch (HttpStatusCodeException e) {
+      // HTTP 状态码异常（4xx, 5xx）
+      int statusCode = e.getStatusCode().value();
+      String reason = statusCode == 401 ? "unauthorized" : "http_error";
+      Object responseBody = null;
+      try {
+        responseBody = e.getResponseBodyAs(Map.class);
+      } catch (Exception ex) {
+        // 如果无法解析响应体，使用原始字符串
+        responseBody = e.getResponseBodyAsString();
+      }
+      log.error("[device-api] List activities failed: url={}, status={}, reason={}", url, statusCode, reason);
+      throw new PlatformCallException(
+          statusCode, url, reason,
+          String.format("List activities failed: HTTP %s, %s", e.getStatusCode(), e.getMessage()),
+          responseBody
+      );
+    } catch (ResourceAccessException e) {
+      // 资源访问异常（超时、连接失败、DNS 解析失败等）
+      String reason = "unreachable";
+      String message = e.getMessage();
+      
+      // 检查 cause 是否是 UnknownHostException
+      Throwable cause = e.getCause();
+      if (cause != null) {
+        String causeClassName = cause.getClass().getSimpleName();
+        if (causeClassName.contains("UnknownHost") || causeClassName.contains("UnknownHostException")) {
+          reason = "dns";
+        } else if (causeClassName.contains("ConnectException") || causeClassName.contains("ConnectionRefused")) {
+          reason = "connection_refused";
+        } else if (causeClassName.contains("SocketTimeout") || causeClassName.contains("ReadTimeout")) {
+          reason = "timeout";
+        }
+      }
+      
+      // 如果 cause 检查没有识别，再检查 message
+      if ("unreachable".equals(reason) && message != null) {
+        String lowerMessage = message.toLowerCase();
+        if (lowerMessage.contains("timeout")) {
+          reason = "timeout";
+        } else if (lowerMessage.contains("unknownhost") || lowerMessage.contains("dns") || 
+                   lowerMessage.contains("unknown host")) {
+          reason = "dns";
+        } else if (lowerMessage.contains("connection refused") || lowerMessage.contains("connectionreset")) {
+          reason = "connection_refused";
+        }
+      }
+      
+      log.error("[device-api] List activities failed: url={}, status=503, reason={}, message={}", url, reason, message);
+      throw new PlatformCallException(
+          503, url, reason,
+          String.format("List activities failed: %s", message)
+      );
     } catch (RestClientException e) {
-      log.error("[device-api] List activities request failed: {}", e.getMessage());
-      throw new RuntimeException("List activities request failed: " + e.getMessage(), e);
+      // 其他 RestClientException
+      log.error("[device-api] List activities failed: url={}, status=503, reason=unreachable, message={}", url, e.getMessage());
+      throw new PlatformCallException(
+          503, url, "unreachable",
+          String.format("List activities failed: %s", e.getMessage())
+      );
     }
   }
 }
