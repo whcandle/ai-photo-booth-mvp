@@ -34,7 +34,10 @@ public class SessionStateMachine {
 
     // Finish: allow recovery to IDLE
     // 允许 PROCESSING -> IDLE：超时/失败回收
-    allowed.put(SessionState.PROCESSING, EnumSet.of(SessionState.PREVIEW, SessionState.IDLE));
+    // V1: 允许 PROCESSING -> PREVIEW（用户确认流程）
+    // V2: 允许直接进入 DELIVERING（自动完成流程，生成下载链接）
+    // DONE 仍作为兜底状态保留
+    allowed.put(SessionState.PROCESSING, EnumSet.of(SessionState.PREVIEW, SessionState.DELIVERING, SessionState.DONE, SessionState.IDLE));
     allowed.put(SessionState.PREVIEW, EnumSet.of(SessionState.COUNTDOWN, SessionState.DELIVERING, SessionState.IDLE));
     allowed.put(SessionState.DELIVERING, EnumSet.of(SessionState.DONE, SessionState.IDLE));
     allowed.put(SessionState.DONE, EnumSet.of(SessionState.IDLE));

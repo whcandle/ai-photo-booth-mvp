@@ -1,0 +1,13 @@
+{
+  "engine": "gateway_v1",
+  "request": {
+    "mode": "img2img",
+    "prompt": "Studio portrait, clean background",
+    "negativePrompt": "low quality, blurry",
+    "strength": 0.6,
+    "seed": -1
+  },
+  "response": {
+    "expect": "image"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "creditsHint": {
+    "image": 1,
+    "video": 0
+  },
+  "billing": {
+    "chargeOn": "SUCCEEDED",
+    "refundOn": "FAILED"
+  }
+}

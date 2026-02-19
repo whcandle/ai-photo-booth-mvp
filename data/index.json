@@ -1,0 +1,19 @@
+{
+  "schemaVersion" : 2,
+  "updatedAt" : "2026-02-18T06:38:57.233Z",
+  "items" : [ {
+    "templateId" : "tpl_001",
+    "version" : "0.1.1",
+    "path" : "templates/tpl_001/0.1.1",
+    "installedAt" : "2026-02-08T00:53:06.409Z",
+    "checksum" : "f288dad7df1564584cf4e2eb4c9d5a5bf9d8d79a5566d8aa230a46673ff0ed1d",
+    "downloadUrl" : "http://127.0.0.1:9000/tpl_001_v0.1.1.zip"
+  }, {
+    "templateId" : "tpl_002",
+    "version" : "0.1.2",
+    "path" : "templates/tpl_002/0.1.2",
+    "installedAt" : "2026-02-18T06:38:57.233Z",
+    "checksum" : "f909e74b3432be726507abd70f794d2259f3ab199ef609557d45ade377b6f126",
+    "downloadUrl" : "http://127.0.0.1:9000/tpl_002_v0.1.2.zip"
+  } ]
+}

@@ -10,6 +10,7 @@ import org.springframework.web.client.RestClient;
 
 import java.util.List;
 
+@Deprecated
 @Component
 public class PlatformDeviceApiClient {
 

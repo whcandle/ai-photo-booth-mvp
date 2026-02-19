@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
+@Deprecated
 @Service
 public class PlatformSyncService {
   private static final Logger log = LoggerFactory.getLogger(PlatformSyncService.class);

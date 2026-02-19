@@ -361,4 +361,152 @@ public class PlatformDeviceApiClient {
       );
     }
   }
+
+  /**
+   * 获取活动模板列表
+   *
+   * @param baseUrl Platform API 基础 URL（例如：http://127.0.0.1:8089）
+   * @param deviceId 设备ID
+   * @param activityId 活动ID
+   * @param deviceToken 设备 token
+   * @return 模板列表（Map 数组）
+   * @throws PlatformCallException 如果平台调用失败
+   * @throws IllegalArgumentException 如果 baseUrl 为空
+   */
+  public java.util.List<Map<String, Object>> listActivityTemplates(
+      String baseUrl, Long deviceId, Long activityId, String deviceToken) {
+    // 检查 baseUrl 是否为空
+    if (baseUrl == null || baseUrl.isBlank()) {
+      throw new IllegalArgumentException("platformBaseUrl not configured");
+    }
+    
+    String url = normalizeBaseUrl(baseUrl) + "/api/v1/device/" + deviceId + "/activities/" + activityId + "/templates";
+
+    // 设置请求头
+    HttpHeaders headers = new HttpHeaders();
+    headers.set("Authorization", "Bearer " + deviceToken);
+    HttpEntity<Void> requestEntity = new HttpEntity<>(headers);
+
+    log.debug("[device-api] List activity templates request: url={}, deviceId={}, activityId={}", url, deviceId, activityId);
+
+    try {
+      ResponseEntity<Map> response = restTemplate.exchange(
+          url,
+          HttpMethod.GET,
+          requestEntity,
+          Map.class
+      );
+
+      // 检查 HTTP 状态码
+      if (!response.getStatusCode().is2xxSuccessful()) {
+        int statusCode = response.getStatusCode().value();
+        Object responseBody = response.getBody();
+        String reason = statusCode == 401 ? "unauthorized" : "http_error";
+        log.error("[device-api] List activity templates failed: url={}, status={}, reason={}", url, statusCode, reason);
+        throw new PlatformCallException(
+            statusCode, url, reason,
+            String.format("List activity templates failed: HTTP %s", response.getStatusCode()),
+            responseBody
+        );
+      }
+
+      Map<String, Object> responseBody = response.getBody();
+      if (responseBody == null) {
+        throw new RuntimeException("List activity templates failed: empty response body");
+      }
+
+      // 检查 success 字段
+      Object successObj = responseBody.get("success");
+      if (!(successObj instanceof Boolean) || !((Boolean) successObj)) {
+        String message = String.valueOf(responseBody.get("message"));
+        // 如果 message 包含 unauthorized 或 token，认为是 401
+        String reason = (message != null && (message.toLowerCase().contains("unauthorized") 
+            || message.toLowerCase().contains("token"))) ? "unauthorized" : "http_error";
+        log.error("[device-api] List activity templates failed: url={}, status=200, reason={}, message={}", url, reason, message);
+        throw new PlatformCallException(
+            -1, url, reason,
+            String.format("List activity templates failed: success=false, message=%s", message),
+            responseBody
+        );
+      }
+
+      // 提取 data
+      Object dataObj = responseBody.get("data");
+      if (dataObj == null) {
+        return java.util.List.of();
+      }
+
+      if (!(dataObj instanceof java.util.List)) {
+        throw new RuntimeException("List activity templates failed: data field is not a list, response=" + responseBody);
+      }
+
+      @SuppressWarnings("unchecked")
+      java.util.List<Map<String, Object>> templates = (java.util.List<Map<String, Object>>) dataObj;
+
+      log.info("[device-api] List activity templates success: count={}", templates.size());
+
+      return templates;
+
+    } catch (HttpStatusCodeException e) {
+      // HTTP 状态码异常（4xx, 5xx）
+      int statusCode = e.getStatusCode().value();
+      String reason = statusCode == 401 ? "unauthorized" : "http_error";
+      Object responseBody = null;
+      try {
+        responseBody = e.getResponseBodyAs(Map.class);
+      } catch (Exception ex) {
+        // 如果无法解析响应体，使用原始字符串
+        responseBody = e.getResponseBodyAsString();
+      }
+      log.error("[device-api] List activity templates failed: url={}, status={}, reason={}", url, statusCode, reason);
+      throw new PlatformCallException(
+          statusCode, url, reason,
+          String.format("List activity templates failed: HTTP %s, %s", e.getStatusCode(), e.getMessage()),
+          responseBody
+      );
+    } catch (ResourceAccessException e) {
+      // 资源访问异常（超时、连接失败、DNS 解析失败等）
+      String reason = "unreachable";
+      String message = e.getMessage();
+      
+      // 检查 cause 是否是 UnknownHostException
+      Throwable cause = e.getCause();
+      if (cause != null) {
+        String causeClassName = cause.getClass().getSimpleName();
+        if (causeClassName.contains("UnknownHost") || causeClassName.contains("UnknownHostException")) {
+          reason = "dns";
+        } else if (causeClassName.contains("ConnectException") || causeClassName.contains("ConnectionRefused")) {
+          reason = "connection_refused";
+        } else if (causeClassName.contains("SocketTimeout") || causeClassName.contains("ReadTimeout")) {
+          reason = "timeout";
+        }
+      }
+      
+      // 如果 cause 检查没有识别，再检查 message
+      if ("unreachable".equals(reason) && message != null) {
+        String lowerMessage = message.toLowerCase();
+        if (lowerMessage.contains("timeout")) {
+          reason = "timeout";
+        } else if (lowerMessage.contains("unknownhost") || lowerMessage.contains("dns") || 
+                   lowerMessage.contains("unknown host")) {
+          reason = "dns";
+        } else if (lowerMessage.contains("connection refused") || lowerMessage.contains("connectionreset")) {
+          reason = "connection_refused";
+        }
+      }
+      
+      log.error("[device-api] List activity templates failed: url={}, status=503, reason={}, message={}", url, reason, message);
+      throw new PlatformCallException(
+          503, url, reason,
+          String.format("List activity templates failed: %s", message)
+      );
+    } catch (RestClientException e) {
+      // 其他 RestClientException
+      log.error("[device-api] List activity templates failed: url={}, status=503, reason=unreachable, message={}", url, e.getMessage());
+      throw new PlatformCallException(
+          503, url, "unreachable",
+          String.format("List activity templates failed: %s", e.getMessage())
+      );
+    }
+  }
 }

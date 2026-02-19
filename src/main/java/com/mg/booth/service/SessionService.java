@@ -15,6 +15,8 @@ import com.mg.booth.dto.SelectTemplateRequest;
 import com.mg.booth.exception.ConflictException;
 import com.mg.booth.exception.NotFoundException;
 import com.mg.booth.util.RawPathUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
@@ -29,6 +31,8 @@ import java.util.concurrent.Executor;
 @Service
 public class SessionService {
 
+  private static final Logger log = LoggerFactory.getLogger(SessionService.class);
+
   private final Map<String, Session> store = new ConcurrentHashMap<>();
   private final TemplateService templateService;
   private final SessionStateMachine sm;
@@ -39,6 +43,8 @@ public class SessionService {
   private final DeliveryService deliveryService;
   private final AiGatewayClient aiGatewayClient;
   private final BoothProps boothProps;
+  private final AiProcessV2Service aiProcessV2Service;
+  private final com.mg.booth.config.AppProps appProps;
 
   public SessionService(
     TemplateService templateService,
@@ -49,7 +55,9 @@ public class SessionService {
     @Qualifier("boothExecutor") Executor boothExecutor,
     DeliveryService deliveryService,
     AiGatewayClient aiGatewayClient,
-    BoothProps boothProps
+    BoothProps boothProps,
+    AiProcessV2Service aiProcessV2Service,
+    com.mg.booth.config.AppProps appProps
   ) {
     this.templateService = templateService;
     this.sm = sm;
@@ -60,6 +68,8 @@ public class SessionService {
     this.deliveryService = deliveryService;
     this.aiGatewayClient = aiGatewayClient;
     this.boothProps = boothProps;
+    this.aiProcessV2Service = aiProcessV2Service;
+    this.appProps = appProps;
   }
 
   //类似会话状态机的切换按钮
@@ -229,83 +239,175 @@ public class SessionService {
           s.setUpdatedAt(OffsetDateTime.now());
         }
 
-        // 3) 组装 gateway 请求（带 FULL template）
-        var tpl = templateService.listTemplates().stream()
-          .filter(t -> t.isEnabled() && t.getTemplateId().equals(s.getTemplateId()))
-          .findFirst()
-          .orElseThrow(() -> new RuntimeException("Template not found: " + s.getTemplateId()));
-
-        // 当前 MVP 的 TemplateSummary 只有 id/name/enabled，这里先只传最小字段。
-        // 后续你扩展 TemplateSummary 字段时，可以这在里补齐 pipeline 需要的字段。
-
-        AiProcessRequest areq = new AiProcessRequest();
-        areq.setSessionId(sessionId);
-        areq.setAttemptIndex(attemptIndex);
-        areq.setTemplateId(tpl.getTemplateId());
-        areq.setRawPath(rawPath.toString());
-
-
-        // options/output（MVP：先给默认值；以后可从前端传）
-        areq.setOptions(Map.of(
-                "bgMode", "STATIC",
-                "segmentation", "AUTO",
-                "featherPx", 6,
-                "strength", 0.6
-        ));
-        areq.setOutput(Map.of(
-                "previewWidth", 900,
-                "finalWidth", 1800
-        ));
-
-        String idemKey = sessionId + "#" + attemptIndex + "#" + tpl.getTemplateId();
-
-        // 4) 调用 AI Gateway
-        synchronized (s) {
-          s.setProgress(new SessionProgress(SessionProgress.Step.AI_PROCESSING, "AI处理中…", 60));
-          s.setUpdatedAt(OffsetDateTime.now());
-        }
-
-        // deviceId 建议从 boothProps 注入（或写死 kiosk-001）
-        String deviceId = boothProps.getDeviceId();
-
-        AiProcessResponse aresp = aiGatewayClient.process(deviceId, idemKey, areq);
-
-        //AiProcessResponse aresp = aiGatewayClient.process(idemKey, areq);
-
-        if (aresp == null || !aresp.isOk()) {
-          String reason = (aresp == null || aresp.getError() == null)
-            ? "gateway_failed"
-            : (aresp.getError().getCode() + ":" + aresp.getError().getMessage());
-          throw new RuntimeException("AI Gateway failed: " + reason);
-        }
-
-        synchronized (s) {
-          s.setPreviewUrl(aresp.getPreviewUrl());
-          s.setFinalUrl(aresp.getFinalUrl());
-          s.setProgress(new SessionProgress(SessionProgress.Step.FINAL_READY, "生成成品…", 95));
-          s.setUpdatedAt(OffsetDateTime.now());
-        }
-
-        // 5) Enter PREVIEW
-        synchronized (s) {
-          if (!sm.canTransition(s.getState(), SessionState.PREVIEW)) {
-            throw new RuntimeException("Invalid transition to PREVIEW from " + s.getState());
+        // 3) 按 mode 分发 AI 处理
+        String aiMode = (appProps != null && appProps.getAi() != null && appProps.getAi().getMode() != null)
+            ? appProps.getAi().getMode()
+            : "v2";
+        
+        if ("v2".equalsIgnoreCase(aiMode)) {
+          // V2: 模板驱动逻辑
+          processAiV2(s, rawPath, attemptIndex);
+        } else {
+          // V1: 原有逻辑（向后兼容）
+          processAiV1(s, rawPath, attemptIndex);
+          // 4) Enter PREVIEW（仅 v1 逻辑保留原有 PREVIEW 状态）
+          synchronized (s) {
+            if (!sm.canTransition(s.getState(), SessionState.PREVIEW)) {
+              throw new RuntimeException("Invalid transition to PREVIEW from " + s.getState());
+            }
+            s.setAiJobRunning(false);
+            enterState(s, SessionState.PREVIEW, new SessionProgress(SessionProgress.Step.FINAL_READY, "请确认 / 重拍", 100));
           }
-          s.setAiJobRunning(false);
-          enterState(s, SessionState.PREVIEW, new SessionProgress(SessionProgress.Step.FINAL_READY, "请确认 / 重拍", 100));
         }
 
       } catch (Exception e) {
         synchronized (s) {
           s.setCaptureJobRunning(false);
           s.setAiJobRunning(false);
-          s.setError(new ApiError("PROCESSING_FAILED", "Capture/AI failed", Map.of("reason", e.getMessage())));
+          // 确保 error.detail.reason 包含真实异常原因
+          String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+          if (e.getCause() != null && e.getCause().getMessage() != null) {
+            reason = reason + " (cause: " + e.getCause().getMessage() + ")";
+          }
+          s.setError(new ApiError("PROCESSING_FAILED", "Capture/AI failed", Map.of("reason", reason)));
           enterState(s, SessionState.ERROR, new SessionProgress(SessionProgress.Step.NONE, "处理失败，返回首页", 0));
         }
       }
     });
 
     return s;
+  }
+
+  /**
+   * V1 AI processing logic (legacy)
+   * 原有的 AI Gateway 调用逻辑
+   */
+  private void processAiV1(Session s, Path rawPath, int attemptIndex) {
+    String sessionId = s.getSessionId();
+    
+    // 组装 gateway 请求（带 FULL template）
+    var tpl = templateService.listTemplates().stream()
+      .filter(t -> t.isEnabled() && t.getTemplateId().equals(s.getTemplateId()))
+      .findFirst()
+      .orElseThrow(() -> new RuntimeException("Template not found: " + s.getTemplateId()));
+
+    // 当前 MVP 的 TemplateSummary 只有 id/name/enabled，这里先只传最小字段。
+    // 后续你扩展 TemplateSummary 字段时，可以这在里补齐 pipeline 需要的字段。
+
+    AiProcessRequest areq = new AiProcessRequest();
+    areq.setSessionId(sessionId);
+    areq.setAttemptIndex(attemptIndex);
+    areq.setTemplateId(tpl.getTemplateId());
+    areq.setRawPath(rawPath.toString());
+
+    // options/output（MVP：先给默认值；以后可从前端传）
+    areq.setOptions(Map.of(
+            "bgMode", "STATIC",
+            "segmentation", "AUTO",
+            "featherPx", 6,
+            "strength", 0.6
+    ));
+    areq.setOutput(Map.of(
+            "previewWidth", 900,
+            "finalWidth", 1800
+    ));
+
+    String idemKey = sessionId + "#" + attemptIndex + "#" + tpl.getTemplateId();
+
+    // 调用 AI Gateway
+    synchronized (s) {
+      s.setProgress(new SessionProgress(SessionProgress.Step.AI_PROCESSING, "AI处理中…", 60));
+      s.setUpdatedAt(OffsetDateTime.now());
+    }
+
+    // deviceId 建议从 boothProps 注入（或写死 kiosk-001）
+    String deviceId = boothProps.getDeviceId();
+
+    AiProcessResponse aresp = aiGatewayClient.process(deviceId, idemKey, areq);
+
+    if (aresp == null || !aresp.isOk()) {
+      String reason = (aresp == null || aresp.getError() == null)
+        ? "gateway_failed"
+        : (aresp.getError().getCode() + ":" + aresp.getError().getMessage());
+      throw new RuntimeException("AI Gateway failed: " + reason);
+    }
+
+    synchronized (s) {
+      s.setPreviewUrl(aresp.getPreviewUrl());
+      s.setFinalUrl(aresp.getFinalUrl());
+      s.setProgress(new SessionProgress(SessionProgress.Step.FINAL_READY, "生成成品…", 95));
+      s.setUpdatedAt(OffsetDateTime.now());
+    }
+  }
+
+  /**
+   * 构建公网可访问的完整 URL
+   * @param path 相对路径（如 "/d/tok_xxx"）
+   * @return 完整的公网 URL
+   */
+  private String buildPublicUrl(String path) {
+    String base = boothProps.getPublicBaseUrl();
+    if (base == null || base.isBlank()) {
+      log.warn("[session-service] booth.publicBaseUrl is empty; using localhost fallback for dev");
+      base = "http://localhost:8080";
+    }
+    // 处理 base 尾部 /
+    return base.endsWith("/") ? base.substring(0, base.length() - 1) + path : base + path;
+  }
+
+  /**
+   * V2 AI processing logic (template-driven)
+   * 新的模板驱动处理逻辑
+   */
+  private void processAiV2(Session s, Path rawPath, int attemptIndex) {
+    String sessionId = s.getSessionId();
+    
+    synchronized (s) {
+      s.setProgress(new SessionProgress(SessionProgress.Step.AI_PROCESSING, "AI处理中…", 60));
+      s.setUpdatedAt(OffsetDateTime.now());
+    }
+
+    // 调用 V2 服务
+    aiProcessV2Service.process(s);
+
+    synchronized (s) {
+      // 标记 AI 任务已完成
+      s.setAiJobRunning(false);
+      // 如果处理成功且生成了 finalUrl，自动生成 downloadUrl 并进入 DELIVERING（v2 自动完成流程）
+      if (s.getFinalUrl() != null && s.getError() == null) {
+        // 自动生成下载 token 和 URL（与 confirm() 逻辑一致）
+        try {
+          var rec = deliveryService.createToken(sessionId, 120);
+          String token = rec.getToken();
+          s.setDownloadToken(token);
+          s.setDownloadUrl(buildPublicUrl("/d/" + token));
+          
+          // 进入 DELIVERING 状态（而不是 DONE），这样前端可以显示二维码
+          if (sm.canTransition(s.getState(), SessionState.DELIVERING)) {
+            enterState(s, SessionState.DELIVERING,
+              new SessionProgress(SessionProgress.Step.DELIVERY_READY, "扫码下载照片", 100));
+            
+            log.info("[session-service] V2 processing success: sessionId={}, state={}, finalUrl={}, downloadUrl={}",
+                sessionId, s.getState(), s.getFinalUrl(), s.getDownloadUrl());
+          } else if (sm.canTransition(s.getState(), SessionState.DONE)) {
+            // 如果无法进入 DELIVERING，则进入 DONE（兜底）
+            enterState(s, SessionState.DONE,
+              new SessionProgress(SessionProgress.Step.FINAL_READY, "生成成品…", 100));
+            
+            log.warn("[session-service] V2 processing success but cannot transition to DELIVERING: sessionId={}, state={}, finalUrl={}, downloadUrl={}",
+                sessionId, s.getState(), s.getFinalUrl(), s.getDownloadUrl());
+          }
+        } catch (Exception e) {
+          log.error("[session-service] Failed to create delivery token for v2: sessionId={}, error={}",
+              sessionId, e.getMessage(), e);
+          // 如果生成 token 失败，仍然进入 DONE 状态（至少可以显示最终图片）
+          if (sm.canTransition(s.getState(), SessionState.DONE)) {
+            enterState(s, SessionState.DONE,
+              new SessionProgress(SessionProgress.Step.FINAL_READY, "生成成品…", 100));
+          }
+        }
+      }
+    }
   }
 
   public void finish(String sessionId, String reason) {
@@ -365,6 +467,8 @@ public class SessionService {
 
     if (s.getState() == SessionState.DELIVERING || s.getState() == SessionState.DONE) {
       // 幂等：已经生成过 token 直接返回
+      log.debug("[session-service] Confirm called but already in DELIVERING/DONE: sessionId={}, state={}",
+          sessionId, s.getState());
       return s;
     }
 
@@ -378,12 +482,16 @@ public class SessionService {
 
     synchronized (s) {
       // 生成 token（TTL 120s，够演示）
-      var rec = deliveryService.createToken(s.getSessionId(), 120);
-      s.setDownloadToken(rec.getToken());
-      s.setDownloadUrl("/d/" + rec.getToken());
+      var rec = deliveryService.createToken(sessionId, 120);
+      String token = rec.getToken();
+      s.setDownloadToken(token);
+      s.setDownloadUrl(buildPublicUrl("/d/" + token));
 
       enterState(s, SessionState.DELIVERING,
         new SessionProgress(SessionProgress.Step.DELIVERY_READY, "扫码下载照片", 100));
+      
+      log.info("[session-service] V1 confirm success: sessionId={}, state={}, finalUrl={}, downloadUrl={}",
+          sessionId, s.getState(), s.getFinalUrl(), s.getDownloadUrl());
     }
 
     return s;

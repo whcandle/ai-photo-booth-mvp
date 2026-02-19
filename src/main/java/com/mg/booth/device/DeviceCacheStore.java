@@ -118,6 +118,91 @@ public class DeviceCacheStore {
   }
 
   /**
+   * Write templates cache to file (atomic write)
+   * 
+   * @param dir Directory where device.json is located
+   * @param activityId Activity ID
+   * @param items Templates list
+   */
+  public void writeTemplatesCache(Path dir, Long activityId, List<Map<String, Object>> items) {
+    Path cacheFile = dir.resolve("templates_cache_" + activityId + ".json");
+    Path tmpFile = null;
+    
+    try {
+      CachePayload payload = new CachePayload(Instant.now(), items);
+      String json = om.writerWithDefaultPrettyPrinter().writeValueAsString(payload);
+      
+      // Ensure parent directory exists
+      if (!Files.exists(dir)) {
+        Files.createDirectories(dir);
+      }
+      
+      // Atomic write: write to tmp file first, then rename
+      tmpFile = cacheFile.resolveSibling(cacheFile.getFileName().toString() + ".tmp");
+      Files.writeString(tmpFile, json, 
+          StandardOpenOption.CREATE, 
+          StandardOpenOption.TRUNCATE_EXISTING, 
+          StandardOpenOption.WRITE);
+      
+      // Try atomic move first, fallback to replace if not supported
+      try {
+        Files.move(tmpFile, cacheFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+      } catch (UnsupportedOperationException e) {
+        log.debug("[cache] ATOMIC_MOVE not supported, using REPLACE_EXISTING");
+        Files.move(tmpFile, cacheFile, StandardCopyOption.REPLACE_EXISTING);
+      }
+      
+      log.info("[cache] Templates cache saved to {} (atomic write), activityId={}, items={}", 
+          cacheFile.toAbsolutePath(), activityId, items.size());
+    } catch (Exception e) {
+      log.error("[cache] Failed to save templates cache to {}: {}", 
+          cacheFile.toAbsolutePath(), e.getMessage(), e);
+      // Clean up tmp file if exists
+      if (tmpFile != null) {
+        try {
+          Files.deleteIfExists(tmpFile);
+        } catch (Exception ex) {
+          log.warn("[cache] Failed to delete tmp file: {}", ex.getMessage());
+        }
+      }
+      throw new RuntimeException("Failed to save templates cache", e);
+    }
+  }
+
+  /**
+   * Read templates cache from file
+   * 
+   * @param dir Directory where device.json is located
+   * @param activityId Activity ID
+   * @return Optional CachePayload, empty if file doesn't exist or parse fails
+   */
+  public Optional<CachePayload> readTemplatesCache(Path dir, Long activityId) {
+    Path cacheFile = dir.resolve("templates_cache_" + activityId + ".json");
+    
+    try {
+      if (!Files.exists(cacheFile)) {
+        log.debug("[cache] Templates cache not found at {}", cacheFile.toAbsolutePath());
+        return Optional.empty();
+      }
+
+      String json = Files.readString(cacheFile);
+      CachePayload payload = om.readValue(json, CachePayload.class);
+      
+      log.debug("[cache] Templates cache loaded from {}, activityId={}, items={}, cachedAt={}", 
+          cacheFile.toAbsolutePath(), 
+          activityId,
+          payload.getItems() != null ? payload.getItems().size() : 0,
+          payload.getCachedAt());
+      
+      return Optional.of(payload);
+    } catch (Exception e) {
+      log.warn("[cache] Failed to load templates cache from {}: {}. Cache will be ignored.", 
+          cacheFile.toAbsolutePath(), e.getMessage());
+      return Optional.empty();
+    }
+  }
+
+  /**
    * Cache payload containing cached data and timestamp
    */
   public static class CachePayload {

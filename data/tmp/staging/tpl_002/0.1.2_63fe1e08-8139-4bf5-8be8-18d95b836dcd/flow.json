@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "steps": [
+    {
+      "type": "intro",
+      "asset": "ui/intro.md"
+    },
+    {
+      "type": "live_preview",
+      "durationMs": 1500
+    },
+    {
+      "type": "countdown",
+      "seconds": 3
+    },
+    {
+      "type": "capture",
+      "shots": 1
+    },
+    {
+      "type": "review",
+      "allowRetake": true
+    },
+    {
+      "type": "submit_ai_job"
+    },
+    {
+      "type": "result_gallery",
+      "minResults": 1
+    }
+  ],
+  "uiHints": {
+    "showTemplateName": true,
+    "showCreditsHint": true
+  }
+}

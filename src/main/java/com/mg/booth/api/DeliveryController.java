@@ -37,20 +37,24 @@ public class DeliveryController {
     }
 
     var s = sessionService.get(rec.getSessionId());
-    String finalUrl = (s.getFinalUrl() == null) ? "" : s.getFinalUrl();
+    // 预览图片和下载按钮都指向本服务的 /d/{token}/download endpoint
+    // 使用 ?preview=true 参数让图片可以内联显示，下载按钮不带参数则触发下载
+    String previewUrl = "/d/" + token + "/download?preview=true";
+    String downloadUrl = "/d/" + token + "/download";
+    
     String html = """
       <html>
       <head><meta charset="utf-8"><title>AI Photo Booth</title></head>
       <body style="font-family: Arial; padding: 24px;">
         <h2>AI Photo Booth</h2>
         <p>点击下方按钮下载照片：</p>
-        <p><a href="/d/%s/download">Download</a></p>
+        <p><a href="%s" style="display: inline-block; padding: 12px 24px; background: #2d6cff; color: white; text-decoration: none; border-radius: 8px;">下载照片</a></p>
         <hr/>
-        <p>预览（可选）：</p>
-        <img src="%s" style="max-width: 100%%; border: 1px solid #ddd;" />
+        <p>预览：</p>
+        <img src="%s" style="max-width: 100%%; border: 1px solid #ddd;" alt="预览图" />
       </body>
       </html>
-      """.formatted(token, finalUrl);
+      """.formatted(downloadUrl, previewUrl);
 
     return ResponseEntity.ok()
       .contentType(MediaType.TEXT_HTML)
@@ -88,7 +92,9 @@ public class DeliveryController {
 //  }
 
   @GetMapping("/d/{token}/download")
-  public ResponseEntity<byte[]> download(@PathVariable String token) {
+  public ResponseEntity<byte[]> download(
+      @PathVariable String token,
+      @RequestParam(value = "preview", required = false, defaultValue = "false") boolean preview) {
     var rec = deliveryService.getValid(token);
     if (rec == null) {
       return ResponseEntity.status(HttpStatus.NOT_FOUND).build();
@@ -116,9 +122,19 @@ public class DeliveryController {
       if (ct == null) ct = MediaType.IMAGE_JPEG; // 默认 jpg
 
       HttpHeaders headers = new HttpHeaders();
-      headers.setContentDisposition(
-              ContentDisposition.attachment().filename("photo.jpg").build()
-      );
+      
+      // 如果是预览模式（preview=true），使用 inline 让图片可以在浏览器中显示
+      // 如果是下载模式（默认），使用 attachment 触发下载
+      if (preview) {
+        headers.setContentDisposition(
+            ContentDisposition.inline().filename("photo.jpg").build()
+        );
+      } else {
+        headers.setContentDisposition(
+            ContentDisposition.attachment().filename("photo.jpg").build()
+        );
+      }
+      
       headers.setCacheControl(CacheControl.noCache());
       headers.setContentType(ct);
 

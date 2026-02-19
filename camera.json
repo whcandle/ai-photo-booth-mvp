@@ -1,15 +1,15 @@
 {
   "cameraModel" : "Canon EOS R6",
   "selectedCameraId" : "auto",
-  "activePresetId" : "preset_day_outdoor",
+  "activePresetId" : "preset_night_indoor",
   "params" : {
-    "iso" : 200,
-    "whiteBalance" : "DAYLIGHT",
+    "iso" : 1600,
+    "whiteBalance" : "TUNGSTEN",
     "exposureCompensationEv" : 0.3,
     "pictureStyle" : "PORTRAIT",
-    "aperture" : "F4.0",
-    "shutterSpeed" : "1/250",
-    "meteringMode" : "EVALUATIVE"
+    "aperture" : "F2.8",
+    "shutterSpeed" : "1/60",
+    "meteringMode" : "CENTER_WEIGHTED"
   },
   "presets" : [ {
     "id" : "preset_day_outdoor",

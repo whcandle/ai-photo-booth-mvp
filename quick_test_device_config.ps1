@@ -66,18 +66,25 @@ try {
 }
 
 Write-Host ""
-Write-Host "4. Testing proxy API..." -ForegroundColor Yellow
-$proxyUrl = "$baseUrl/api/v1/device/activities"
+Write-Host "4. Testing activities API (new endpoint)..." -ForegroundColor Yellow
+$activitiesUrl = "$baseUrl/local/device/activities"
 try {
-    $response = Invoke-WebRequest -Uri $proxyUrl -Method GET -UseBasicParsing -ErrorAction Stop
+    $response = Invoke-WebRequest -Uri $activitiesUrl -Method GET -UseBasicParsing -ErrorAction Stop
     $result = $response.Content | ConvertFrom-Json
-    if ($result.success) {
-        Write-Host "   [OK] Proxy API is working" -ForegroundColor Green
+    if ($result.items) {
+        Write-Host "   [OK] Activities API is working (items: $($result.items.Count), stale: $($result.stale))" -ForegroundColor Green
     } else {
-        Write-Host "   [WARN] Proxy API returned error (may not be handshaked): $($result.message)" -ForegroundColor Yellow
+        Write-Host "   [WARN] Activities API returned unexpected format" -ForegroundColor Yellow
     }
 } catch {
-    Write-Host "   [WARN] Proxy API call failed (may not be handshaked): $_" -ForegroundColor Yellow
+    $statusCode = $_.Exception.Response.StatusCode.value__
+    if ($statusCode -eq 401) {
+        Write-Host "   [WARN] Activities API returned 401 (token invalid, need handshake)" -ForegroundColor Yellow
+    } elseif ($statusCode -eq 503) {
+        Write-Host "   [WARN] Activities API returned 503 (platform unreachable, may use cache)" -ForegroundColor Yellow
+    } else {
+        Write-Host "   [WARN] Activities API call failed: $_" -ForegroundColor Yellow
+    }
 }
 
 Write-Host ""

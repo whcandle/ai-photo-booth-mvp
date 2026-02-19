@@ -1,0 +1,22 @@
+{
+  "pipelineMode": "C_CUTOUT_COMPOSE",
+  "segmentation": {
+    "enabled": true,
+    "provider": "auto",
+    "prefer": ["removebg", "rembg"],
+    "timeoutMs": 6000,
+    "output": "rgba",
+    "featherPx": 2,
+    "decontam": true,
+    "minSubjectAreaRatio": 0.08,
+    "fallback": "raw"
+  },
+  "compose": {
+    "safeArea": { "x": 0, "y": 0, "w": 1024, "h": 1024 },
+    "backgroundMode": "static"
+  },
+  "output": {
+    "preview": { "enabled": true, "maxWidth": 768 },
+    "final": { "enabled": true }
+  }
+}

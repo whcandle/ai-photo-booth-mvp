@@ -1,0 +1,26 @@
+{
+  "cachedAt" : "2026-02-19T11:41:58.137Z",
+  "items" : [ {
+    "templateCode" : "tpl_001",
+    "versionSemver" : "0.1.1",
+    "templateId" : 3,
+    "version" : "0.1.1",
+    "name" : "tpl_001",
+    "coverUrl" : null,
+    "downloadUrl" : "http://127.0.0.1:9000/tpl_001_v0.1.1.zip",
+    "enabled" : true,
+    "updatedAt" : "2026-02-16T16:27:27Z",
+    "checksumSha256" : "0f22ec34af744caf1cf945ce4830814a9b37caeeb4903995c7de8f8001894f96"
+  }, {
+    "templateCode" : "tpl_002",
+    "versionSemver" : "0.1.2",
+    "templateId" : 5,
+    "version" : "0.1.2",
+    "name" : "test02",
+    "coverUrl" : null,
+    "downloadUrl" : "http://127.0.0.1:9000/tpl_002_v0.1.2.zip",
+    "enabled" : true,
+    "updatedAt" : "2026-02-16T18:53:21Z",
+    "checksumSha256" : "f909e74b3432be726507abd70f794d2259f3ab199ef609557d45ade377b6f126"
+  } ]
+}

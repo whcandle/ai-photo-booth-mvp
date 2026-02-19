@@ -1,0 +1,33 @@
+{
+  "templateId": "tpl_001",
+  "version": "0.1.1",
+  "name": "Minimal Demo Template",
+  "engine": "gateway_v1",
+  "input": {
+    "shots": 1,
+    "ratio": "3:4"
+  },
+  "output": {
+    "type": "image",
+    "size": "1024x1024"
+  },
+  "aiDefaults": {
+    "style": "studio",
+    "strength": 0.6
+  },
+  "assets": {
+    "preview": "preview.png",
+    "flow": "flow.json",
+    "ai": "ai.json",
+    "rules": "rules.json",
+    "ui": "ui/"
+  },
+
+
+"compose": {
+  "background": "assets/bg.png",
+  "photo": { "x": 100, "y": 200, "w": 800, "h": 900 }
+},
+
+  "createdAt": "2026-01-27T10:18:20Z"
+}

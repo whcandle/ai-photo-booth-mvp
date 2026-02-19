@@ -227,6 +227,125 @@ public class DevicePlatformController {
   }
 
   /**
+   * GET /local/device/activities/{activityId}/templates
+   * Get templates list for a specific activity from platform (online first, fallback to cache)
+   * 
+   * @param activityId Activity ID
+   * @param request HTTP request (for localhost check)
+   * @return Templates list with stale flag
+   */
+  @GetMapping("/activities/{activityId}/templates")
+  public ResponseEntity<?> getActivityTemplates(
+      @PathVariable Long activityId,
+      HttpServletRequest request) {
+    if (!isLocalhost(request)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN)
+          .body(createErrorResponse("Access denied: only localhost allowed"));
+    }
+
+    try {
+      // 1. Load device.json
+      Path file = Path.of(props.getDeviceIdentityFile());
+      DeviceConfig config = configStore.load(file);
+      Path dir = file.getParent() != null ? file.getParent() : Path.of(".");
+
+      // 2. Validate required fields
+      String platformBaseUrl = config.getPlatformBaseUrl();
+      if (platformBaseUrl == null || platformBaseUrl.isBlank()) {
+        platformBaseUrl = props.getPlatformBaseUrl();
+      }
+      if (platformBaseUrl == null || platformBaseUrl.isBlank()) {
+        return ResponseEntity.ok(createErrorResponse("platformBaseUrl not configured"));
+      }
+      if (config.getDeviceId() == null || config.getDeviceId().isBlank()) {
+        return ResponseEntity.ok(createErrorResponse("deviceId not configured (handshake required)"));
+      }
+      if (config.getDeviceToken() == null || config.getDeviceToken().isBlank()) {
+        return ResponseEntity.ok(createErrorResponse("deviceToken not configured (handshake required)"));
+      }
+
+      Long deviceId = config.getDeviceIdAsLong();
+      if (deviceId == null) {
+        return ResponseEntity.ok(createErrorResponse("invalid deviceId"));
+      }
+
+      // 3. Try online call first
+      try {
+        List<Map<String, Object>> templates = apiClient.listActivityTemplates(
+            platformBaseUrl,
+            deviceId,
+            activityId,
+            config.getDeviceToken()
+        );
+
+        // 4. Online call successful: write cache and return
+        cacheStore.writeTemplatesCache(dir, activityId, templates);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("success", true);
+        Map<String, Object> data = new HashMap<>();
+        data.put("items", templates);
+        data.put("stale", false);
+        response.put("data", data);
+        response.put("message", null);
+
+        log.info("[device-platform] Templates fetched successfully: activityId={}, count={}", 
+            activityId, templates.size());
+        return ResponseEntity.ok(response);
+
+      } catch (PlatformCallException e) {
+        // Handle platform call exceptions
+        if (e.isUnauthorized()) {
+          // 401: Token invalid/expired
+          log.warn("[device-platform] Templates failed: 401 unauthorized, activityId={}", activityId);
+          return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+              .body(createErrorResponse("token invalid/expired"));
+        } else if (e.isUnreachable()) {
+          // 503: Platform unreachable, try cache
+          log.warn("[device-platform] Templates failed: platform unreachable (status={}, reason={}), trying cache, activityId={}", 
+              e.getHttpStatus(), e.getReason(), activityId);
+          
+          var cacheOpt = cacheStore.readTemplatesCache(dir, activityId);
+          if (cacheOpt.isPresent()) {
+            // Cache exists: return cached data with stale=true
+            var cache = cacheOpt.get();
+            Map<String, Object> response = new HashMap<>();
+            response.put("success", true);
+            Map<String, Object> data = new HashMap<>();
+            data.put("items", cache.getItems());
+            data.put("stale", true);
+            data.put("cachedAt", cache.getCachedAt().toString());
+            response.put("data", data);
+            response.put("message", "using cached data");
+
+            log.info("[device-platform] Using cached templates: activityId={}, count={}, cachedAt={}", 
+                activityId, cache.getItems().size(), cache.getCachedAt());
+            return ResponseEntity.ok(response);
+          } else {
+            // No cache: return 503
+            log.error("[device-platform] Platform unreachable and no cache available, activityId={}", activityId);
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(createErrorResponse("platform unreachable and no cache"));
+          }
+        } else {
+          // Other HTTP errors: return error
+          log.error("[device-platform] Templates failed: status={}, reason={}, activityId={}", 
+              e.getHttpStatus(), e.getReason(), activityId);
+          HttpStatus status = e.getHttpStatus() > 0 
+              ? HttpStatus.valueOf(e.getHttpStatus()) 
+              : HttpStatus.INTERNAL_SERVER_ERROR;
+          return ResponseEntity.status(status)
+              .body(createErrorResponse(String.format("Templates failed: %s", e.getMessage())));
+        }
+      }
+
+    } catch (Exception e) {
+      log.error("[device-platform] Get templates failed: activityId={}, error={}", activityId, e.getMessage(), e);
+      return ResponseEntity.ok(createErrorResponse("Failed to get templates: " + e.getMessage()));
+    }
+  }
+
+  /**
    * Check if request is from localhost (simplified: only trust remoteAddr)
    */
   private boolean isLocalhost(HttpServletRequest request) {

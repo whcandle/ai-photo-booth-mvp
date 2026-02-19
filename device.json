@@ -1,8 +1,8 @@
 {
   "platformBaseUrl" : "http://127.0.0.1:8089",
   "deviceCode" : "dev_001",
-  "secret" : "CHANGE_ME",
-  "deviceId" : "",
-  "deviceToken" : "",
-  "tokenExpiresAt" : ""
+  "secret" : "dev_001_secret",
+  "deviceId" : "4",
+  "deviceToken" : "eyJhbGciOiJIUzM4NCJ9.eyJtZXJjaGFudElkIjoxLCJ0eXBlIjoiZGV2aWNlIiwiZGV2aWNlSWQiOjQsInN1YiI6ImRldmljZTo0IiwiaWF0IjoxNzcxNTAxMzE0LCJleHAiOjE3NzE1ODc3MTR9.cT4GzdctPyS9HqDI4hpyLPoXoBXXhFHg3SEVYDlPaoy2ATgr2SFiwHPGX5IfC8jX",
+  "tokenExpiresAt" : "2026-02-20T11:41:54.384363400Z"
 }

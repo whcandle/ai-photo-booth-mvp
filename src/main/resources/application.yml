@@ -19,4 +19,12 @@ booth:
   platformBaseUrl: "http://127.0.0.1:8089"  # Platform API 地址
   deviceIdentityFile: "device.json"  # device.json 文件路径（运行目录）
   cameraConfigFile: "camera.json"  # camera.json 文件路径（运行目录）
+  deprecatedApiEnabled: false  # 是否启用已废弃 API（如 /api/v1/device/activities），默认关闭
+  dataDir: "./data"  # 数据目录根路径（用于存储 templates、cache、index 等）
+  # 公网可访问的基础 URL（用于生成手机可扫描的下载链接）
+  # 不能使用 localhost，必须是手机可访问的地址（如 http://192.168.1.100:8080 或 https://example.com）
+  publicBaseUrl: "http://192.168.0.103:8080"  # 示例：局域网 IP 地址
+  # publicBaseUrl: "https://example.com"  # 示例：公网域名
+  delivery:
+    mode: local  # 交付模式：local（本地交付）或 cloud（云端交付，预留），默认 local
 
